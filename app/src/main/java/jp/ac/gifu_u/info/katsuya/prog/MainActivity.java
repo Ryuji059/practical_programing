@@ -21,6 +21,7 @@ import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polyline;
+import android.graphics.Color;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -138,6 +139,8 @@ public class MainActivity extends AppCompatActivity {
                 currentPoint = new GeoPoint(lat, lon);
                 //記録中はroutePointsに現在地を記録
                 if (isRecording) {
+                    routeLine.setColor(Color.GREEN);
+                    routeLine.setWidth(12f);
                     routePoints.add(currentPoint);
                     routeLine.setPoints(routePoints);
                     map.invalidate();
