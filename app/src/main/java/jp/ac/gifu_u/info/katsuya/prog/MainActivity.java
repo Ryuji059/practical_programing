@@ -79,17 +79,17 @@ public class MainActivity extends AppCompatActivity {
 
         btnStart.setOnClickListener(v -> {
             isRecording = true;
-            routePoints.clear();
+            routePoints.clear();//今までの記録を破棄
             if (currentPoint != null) {
-                routePoints.add(currentPoint);
+                routePoints.add(currentPoint);//初期地点を記録
             }
-            routeLine.setPoints(routePoints);
-            Toast.makeText(this, "記録を開始しました", Toast.LENGTH_SHORT).show();
+            routeLine.setPoints(routePoints);//点の追加
+            Toast.makeText(this, "記録を開始しました", Toast.LENGTH_SHORT).show();//記録開始の通知
         });
 
         btnStop.setOnClickListener(v -> {
             isRecording = false;
-            Toast.makeText(this, "記録を停止しました", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "記録を停止しました", Toast.LENGTH_SHORT).show();//記録終了通知
 
             // 後でここに保存処理を書く
         });
@@ -133,21 +133,22 @@ public class MainActivity extends AppCompatActivity {
         LocationListener listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
+                //現在の緯度経度を取得
                 double lat = location.getLatitude();
                 double lon = location.getLongitude();
 
-                currentPoint = new GeoPoint(lat, lon);
+                currentPoint = new GeoPoint(lat, lon);//現在地を更新
                 //記録中はroutePointsに現在地を記録
                 if (isRecording) {
-                    routeLine.setColor(Color.GREEN);
-                    routeLine.setWidth(12f);
-                    routePoints.add(currentPoint);
-                    routeLine.setPoints(routePoints);
-                    map.invalidate();
+                    routeLine.setColor(Color.GREEN);//古い書き方(推奨されているのはpaint)
+                    routeLine.setWidth(12f);//古い書き方(推奨されているのはpaint)
+                    routePoints.add(currentPoint);//現在地を追加
+                    routeLine.setPoints(routePoints);//点を追加
+                    map.invalidate();//可視化
                 }
 
-                // 現在地マーカーを更新
-                if (currentMarker == null) {
+                // 現在地マーカーの位置を更新
+                if (currentMarker == null) {//ない場合は作成
                     currentMarker = new Marker(map);
                     currentMarker.setTitle("現在地");
                     map.getOverlays().add(currentMarker);
@@ -159,7 +160,7 @@ public class MainActivity extends AppCompatActivity {
                 map.invalidate();
             }
         };
-
+        //3秒または5メートル進んだらGPS情報を取得
         locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 3000,
