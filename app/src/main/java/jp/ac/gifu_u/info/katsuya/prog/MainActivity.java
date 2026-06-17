@@ -32,8 +32,16 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import android.util.Log;
+import android.view.View;
+import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity {
+    private enum AppMode {
+        MAP,        // 通常地図
+        RECORDING, // 記録中
+        HISTORY,   // 履歴表示
+        EDIT_ROAD  // 道路色分け
+    }
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
     private Marker currentMarker;//現在位置のピン
@@ -44,7 +52,13 @@ public class MainActivity extends AppCompatActivity {
     private long startTime = 0;//記録開始の時刻
     private long endTime = 0;//記録終了の時刻
     private double totalDistance = 0.0;//記録中の走行距離
-    private RoutePoint lastRoutePoint = null;
+    private RoutePoint lastRoutePoint = null;//今の地点
+    private AppMode currentMode = AppMode.MAP;//現在のモード
+    private View mapLayout;
+    private View historyLayout;
+    private View recordPanel;
+    private View roadEditPanel;
+    private TextView titleBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,6 +78,22 @@ public class MainActivity extends AppCompatActivity {
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
         startLocationUpdates();
+
+        mapLayout = findViewById(R.id.mapLayout);
+        historyLayout = findViewById(R.id.historyLayout);
+        recordPanel = findViewById(R.id.recordPanel);
+        roadEditPanel = findViewById(R.id.roadEditPanel);
+        titleBar = findViewById(R.id.titleBar);
+
+        Button btnHistoryMode = findViewById(R.id.btnHistoryMode);
+        Button btnRoadEditMode = findViewById(R.id.btnRoadEditMode);
+        Button btnBackMap = findViewById(R.id.btnBackMap);
+        Button btnCancelRoadEdit = findViewById(R.id.btnCancelRoadEdit);
+
+        btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
+        btnRoadEditMode.setOnClickListener(v -> changeMode(AppMode.EDIT_ROAD));
+        btnBackMap.setOnClickListener(v -> changeMode(AppMode.MAP));
+        btnCancelRoadEdit.setOnClickListener(v -> changeMode(AppMode.MAP));
 
         //現在地を画面の中心に持ってくるボタン
         Button btnCurrentLocation = findViewById(R.id.btnCurrentLocation);//ボタンのID取得
@@ -87,7 +117,12 @@ public class MainActivity extends AppCompatActivity {
 
         //記録開始ボタン
         btnStart.setOnClickListener(v -> {
+            if (isRecording) {
+                Toast.makeText(this, "すでに記録中です", Toast.LENGTH_SHORT).show();
+                return;
+            }
             isRecording = true;
+            changeMode(AppMode.RECORDING);
 
             //初期化
             routePoints.clear();
@@ -117,6 +152,10 @@ public class MainActivity extends AppCompatActivity {
 
         //終了ボタン
         btnStop.setOnClickListener(v -> {
+            if (!isRecording) {
+                Toast.makeText(this, "現在は記録中ではありません", Toast.LENGTH_SHORT).show();
+                return;
+            }
             isRecording = false;
             endTime = System.currentTimeMillis();//終了時刻を記録
 
@@ -125,6 +164,8 @@ public class MainActivity extends AppCompatActivity {
             //終了を通知
             Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
         });
+
+        changeMode(AppMode.MAP);
     }
 
 
@@ -339,6 +380,35 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
             Toast.makeText(this, "保存に失敗しました", Toast.LENGTH_SHORT).show();
+        }
+    }
+    private void changeMode(AppMode mode) {
+        currentMode = mode;
+
+        if (mode == AppMode.HISTORY) {
+            mapLayout.setVisibility(View.GONE);
+            historyLayout.setVisibility(View.VISIBLE);
+            isRecording = false;
+        } else {
+            mapLayout.setVisibility(View.VISIBLE);
+            historyLayout.setVisibility(View.GONE);
+
+            if (mode == AppMode.MAP) {
+                titleBar.setText("自転車安全マップ");
+                titleBar.setBackgroundColor(Color.rgb(67, 160, 71));
+                recordPanel.setVisibility(View.VISIBLE);
+                roadEditPanel.setVisibility(View.GONE);
+            } else if (mode == AppMode.EDIT_ROAD) {
+                titleBar.setText("色分けモード");
+                titleBar.setBackgroundColor(Color.rgb(70, 170, 220));
+                recordPanel.setVisibility(View.GONE);
+                roadEditPanel.setVisibility(View.VISIBLE);
+                isRecording = false;
+            } else if (mode == AppMode.RECORDING) {
+                titleBar.setText("記録中");
+                recordPanel.setVisibility(View.VISIBLE);
+                roadEditPanel.setVisibility(View.GONE);
+            }
         }
     }
 }
