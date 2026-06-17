@@ -22,20 +22,29 @@ import androidx.core.app.ActivityCompat;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polyline;
 import android.graphics.Color;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import android.util.Log;
 
 public class MainActivity extends AppCompatActivity {
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
     private Marker currentMarker;//現在位置のピン
     private GeoPoint currentPoint;//現在位置の保存
-    private ArrayList<GeoPoint> routePoints = new ArrayList<>();
     private Polyline routeLine;
-    private boolean isRecording = false;
-
-
+    private boolean isRecording = false;//記録中かどうかのフラグ
+    private ArrayList<RoutePoint> routePoints = new ArrayList<>();//記録したポイントの配列
+    private long startTime = 0;//記録開始の時刻
+    private long endTime = 0;//記録終了の時刻
+    private double totalDistance = 0.0;//記録中の走行距離
+    private RoutePoint lastRoutePoint = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,8 +53,6 @@ public class MainActivity extends AppCompatActivity {
         Configuration.getInstance().setUserAgentValue(getPackageName());//OpenStreetMapのサーバーへ「このアプリがアクセスしています」と名乗る
         //レイアウト読み込み
         setContentView(R.layout.activity_main);
-
-
 
         map = findViewById(R.id.map);//MapViewの取得
         map.setTileSource(TileSourceFactory.MAPNIK);//地図の種類を設定(今回はOpenStreetMap標準地図)
@@ -70,6 +77,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //線を引くための準備
         routeLine = new Polyline();
         map.getOverlays().add(routeLine);
 
@@ -77,21 +85,45 @@ public class MainActivity extends AppCompatActivity {
         Button btnStart = findViewById(R.id.btnStart);
         Button btnStop = findViewById(R.id.btnStop);
 
+        //記録開始ボタン
         btnStart.setOnClickListener(v -> {
             isRecording = true;
-            routePoints.clear();//今までの記録を破棄
+
+            //初期化
+            routePoints.clear();
+            totalDistance = 0.0;//走行距離を0に
+            lastRoutePoint = null;//最新のポイントを消す
+            startTime = System.currentTimeMillis();//開始時刻の記録
+
+            routeLine.setPoints(new ArrayList<>());
+            map.invalidate();
+            //現在地の記録
             if (currentPoint != null) {
-                routePoints.add(currentPoint);//初期地点を記録
+                RoutePoint firstPoint = new RoutePoint(
+                        currentPoint.getLatitude(),
+                        currentPoint.getLongitude(),
+                        startTime,
+                        0.0f,
+                        0.0
+                );
+
+                routePoints.add(firstPoint);
+                lastRoutePoint = firstPoint;
+                updateRouteLine();//ルートラインの更新
             }
-            routeLine.setPoints(routePoints);//点の追加
-            Toast.makeText(this, "記録を開始しました", Toast.LENGTH_SHORT).show();//記録開始の通知
+            //開始を通知
+            Toast.makeText(this, "記録を開始しました", Toast.LENGTH_SHORT).show();
         });
 
+        //終了ボタン
         btnStop.setOnClickListener(v -> {
             isRecording = false;
-            Toast.makeText(this, "記録を停止しました", Toast.LENGTH_SHORT).show();//記録終了通知
+            endTime = System.currentTimeMillis();//終了時刻を記録
 
-            // 後でここに保存処理を書く
+            saveRouteToJson();//JSONファイルに保存
+
+            //終了を通知
+            Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -140,11 +172,36 @@ public class MainActivity extends AppCompatActivity {
                 currentPoint = new GeoPoint(lat, lon);//現在地を更新
                 //記録中はroutePointsに現在地を記録
                 if (isRecording) {
-                    routeLine.setColor(Color.GREEN);//古い書き方(推奨されているのはpaint)
-                    routeLine.setWidth(12f);//古い書き方(推奨されているのはpaint)
-                    routePoints.add(currentPoint);//現在地を追加
-                    routeLine.setPoints(routePoints);//点を追加
-                    map.invalidate();//可視化
+                    long time = System.currentTimeMillis();//記録時刻を記録
+                    float speed = location.hasSpeed() ? location.getSpeed() : 0.0f;//GPSから速度を取得
+
+                    //走行距離の更新
+                    if (lastRoutePoint != null) {
+                        float[] result = new float[1];//答えを入れるための配列
+                        //直前の地点から今の地点の距離を計算
+                        Location.distanceBetween(
+                                lastRoutePoint.lat,
+                                lastRoutePoint.lon,
+                                lat,
+                                lon,
+                                result
+                        );
+                        //増えた分を加算
+                        totalDistance += result[0];
+                    }
+                    //RoutePointクラスに格納
+                    RoutePoint routePoint = new RoutePoint(
+                            lat,
+                            lon,
+                            time,
+                            speed,
+                            totalDistance
+                    );
+                    //配列に追加
+                    routePoints.add(routePoint);
+                    lastRoutePoint = routePoint;//lastRoutePointを更新
+
+                    updateRouteLine();//ルートラインを更新
                 }
 
                 // 現在地マーカーの位置を更新
@@ -184,6 +241,104 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 Toast.makeText(this, "位置情報の権限が必要です", Toast.LENGTH_SHORT).show();
             }
+        }
+    }
+
+    /**
+     * 線を引けるような形にする関数
+     */
+    private void updateRouteLine() {
+        //routePointからgeoPointに変換
+        ArrayList<GeoPoint> geoPoints = new ArrayList<>();
+        //
+        for (RoutePoint p : routePoints) {//各routePointから緯度経度を取り出してgeoPointを作る
+            geoPoints.add(new GeoPoint(p.lat, p.lon));
+        }
+        //線を引く
+        routeLine.setPoints(geoPoints);
+        map.invalidate();
+    }
+
+    /**
+     * 記録した走行ルートをJSONファイルとして保存する関数
+     * JSONファイルの構造例
+     * {
+     *   "startTime": 123456789,
+     *   "endTime": 123456999,
+     *   "totalDistance": 350.5,
+     *   "averageSpeed": 4.2,
+     *   "points": [
+     *     {
+     *       "lat": 35.464,
+     *       "lon": 136.735,
+     *       "time": 123456789,
+     *       "speed": 3.5,
+     *       "distance": 0
+     *     }
+     *   ]
+     * }
+     */
+    private void saveRouteToJson() {
+        try {
+            if (routePoints.size() < 2) {//保存する点が1つ以下場合は保存しない
+                Toast.makeText(this, "記録点が少なすぎます", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            JSONObject routeJson = new JSONObject();//JSONObjectを作る {}<-これを作ってると考えてよし
+
+            routeJson.put("startTime", startTime);//開始時刻をJSONに入れる
+            routeJson.put("endTime", endTime);//終了時刻をJSONに入れる
+            routeJson.put("totalDistance", totalDistance);//走行距離をJSONに入れる
+            //平均速度を計算
+            double elapsedSec = (endTime - startTime) / 1000.0;
+            double averageSpeed = 0.0;
+
+            if (elapsedSec > 0) {
+                averageSpeed = totalDistance / elapsedSec; // m/s
+            }
+
+            routeJson.put("averageSpeed", averageSpeed);//平均速度をJSONに入れる
+
+            JSONArray pointsArray = new JSONArray();//JSONArrayの作成(からの配列を作る)
+            //各ルートポイントをJSONに保存
+            for (RoutePoint p : routePoints) {
+                JSONObject pointJson = new JSONObject();//JSONオブジェクトを作成
+
+                pointJson.put("lat", p.lat);//緯度
+                pointJson.put("lon", p.lon);//経度
+                pointJson.put("time", p.time);//記録時刻
+                pointJson.put("speed", p.speed);//GPSによる速度
+                pointJson.put("distance", p.distance);//距離
+
+                pointsArray.put(pointJson);//作成したJSONオブジェクトを配列に追加
+            }
+
+            routeJson.put("points", pointsArray);//routeJsonにpointsを追加
+            //ファイル名を決める(route_(年)(月)(日)_(時)(分)(秒).json)
+            String fileName = "route_" +
+                    new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.JAPAN)
+                            .format(new Date(startTime)) +
+                    ".json";
+            //アプリ専用領域のrouteフォルダを探す
+            File routeDir = new File(getFilesDir(), "routes");
+
+            if (!routeDir.exists()) {//なければ作成
+                routeDir.mkdir();
+            }
+
+            File file = new File(routeDir, fileName);//ファイルを作成
+
+            FileOutputStream fos = new FileOutputStream(file);//ファイルを開く
+            fos.write(routeJson.toString(4).getBytes());//ファイルに書き込み
+            fos.close();//ファイルを閉じる
+            Log.d("SAVE_ROUTE", file.getAbsolutePath());
+            //保存が成功したことを通知
+            Toast.makeText(this, "保存しました: " + fileName, Toast.LENGTH_SHORT).show();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "保存に失敗しました", Toast.LENGTH_SHORT).show();
         }
     }
 }
