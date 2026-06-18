@@ -77,23 +77,28 @@ public class MainActivity extends AppCompatActivity {
         map.getController().setCenter(startPoint);//startPointを中心に表示
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
-        startLocationUpdates();
-
+        //各モードのレイアウトを取得
         mapLayout = findViewById(R.id.mapLayout);
         historyLayout = findViewById(R.id.historyLayout);
         recordPanel = findViewById(R.id.recordPanel);
         roadEditPanel = findViewById(R.id.roadEditPanel);
         titleBar = findViewById(R.id.titleBar);
-
+        //ボタンのID取得
         Button btnHistoryMode = findViewById(R.id.btnHistoryMode);
         Button btnRoadEditMode = findViewById(R.id.btnRoadEditMode);
         Button btnBackMap = findViewById(R.id.btnBackMap);
-        Button btnCancelRoadEdit = findViewById(R.id.btnCancelRoadEdit);
+        Button btnSaveRoadEdit = findViewById(R.id.btnSaveRoadEdit);
+        Button btnFinishRoadEdit = findViewById(R.id.btnFinishRoadEdit);
 
+        //各種ボタンの機能実装
         btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
         btnRoadEditMode.setOnClickListener(v -> changeMode(AppMode.EDIT_ROAD));
         btnBackMap.setOnClickListener(v -> changeMode(AppMode.MAP));
-        btnCancelRoadEdit.setOnClickListener(v -> changeMode(AppMode.MAP));
+        btnSaveRoadEdit.setOnClickListener(v -> {
+            // 色分けデータをJSONに保存
+        });
+        btnFinishRoadEdit.setOnClickListener(v -> {changeMode(AppMode.MAP);});
+
 
         //現在地を画面の中心に持ってくるボタン
         Button btnCurrentLocation = findViewById(R.id.btnCurrentLocation);//ボタンのID取得
@@ -164,7 +169,7 @@ public class MainActivity extends AppCompatActivity {
             //終了を通知
             Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
         });
-
+        startLocationUpdates();
         changeMode(AppMode.MAP);
     }
 
@@ -404,6 +409,7 @@ public class MainActivity extends AppCompatActivity {
                 recordPanel.setVisibility(View.GONE);
                 roadEditPanel.setVisibility(View.VISIBLE);
                 isRecording = false;
+                Log.d("MODE", "EDIT_ROAD");
             } else if (mode == AppMode.RECORDING) {
                 titleBar.setText("記録中");
                 recordPanel.setVisibility(View.VISIBLE);

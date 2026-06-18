@@ -48,7 +48,7 @@
             <LinearLayout
                 android:id="@+id/roadEditPanel"
                 android:layout_width="match_parent"
-                android:layout_height="190dp"
+                android:layout_height="240dp"
                 android:layout_gravity="bottom"
                 android:orientation="vertical"
                 android:padding="12dp"
@@ -85,11 +85,28 @@
                         android:text="注意区間" />
                 </RadioGroup>
 
-                <Button
-                    android:id="@+id/btnCancelRoadEdit"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="キャンセル" />
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/btnSaveRoadEdit"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="保存" />
+
+                    <Button
+                        android:id="@+id/btnFinishRoadEdit"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="終了" />
+
+                </LinearLayout>
             </LinearLayout>
 
         </FrameLayout>
