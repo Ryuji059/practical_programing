@@ -34,6 +34,9 @@ import java.util.Locale;
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.LinearLayout;
+import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -59,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
     private View recordPanel;
     private View roadEditPanel;
     private TextView titleBar;
+    private LinearLayout historyList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
         recordPanel = findViewById(R.id.recordPanel);
         roadEditPanel = findViewById(R.id.roadEditPanel);
         titleBar = findViewById(R.id.titleBar);
+        historyList = findViewById(R.id.historyList);
         //ボタンのID取得
         Button btnHistoryMode = findViewById(R.id.btnHistoryMode);
         Button btnRoadEditMode = findViewById(R.id.btnRoadEditMode);
@@ -394,6 +399,10 @@ public class MainActivity extends AppCompatActivity {
             mapLayout.setVisibility(View.GONE);
             historyLayout.setVisibility(View.VISIBLE);
             isRecording = false;
+
+            loadHistoryList();
+
+            return;
         } else {
             mapLayout.setVisibility(View.VISIBLE);
             historyLayout.setVisibility(View.GONE);
@@ -415,6 +424,126 @@ public class MainActivity extends AppCompatActivity {
                 recordPanel.setVisibility(View.VISIBLE);
                 roadEditPanel.setVisibility(View.GONE);
             }
+        }
+    }
+
+    private void loadHistoryList() {
+        historyList.removeAllViews();
+
+        File routeDir = new File(getFilesDir(), "routes");
+
+        if (!routeDir.exists()) {
+            TextView emptyText = new TextView(this);
+            emptyText.setText("保存された走行履歴はありません");
+            emptyText.setTextSize(18);
+            historyList.addView(emptyText);
+            return;
+        }
+
+        File[] files = routeDir.listFiles();
+
+        if (files == null || files.length == 0) {
+            TextView emptyText = new TextView(this);
+            emptyText.setText("保存された走行履歴はありません");
+            emptyText.setTextSize(18);
+            historyList.addView(emptyText);
+            return;
+        }
+
+        for (File file : files) {
+            if (!file.getName().endsWith(".json")) {
+                continue;
+            }
+
+            try {
+                String jsonText = readTextFile(file);
+                JSONObject json = new JSONObject(jsonText);
+
+                long start = json.getLong("startTime");
+                long end = json.getLong("endTime");
+                double distance = json.getDouble("totalDistance");
+
+                String dateText = new SimpleDateFormat(
+                        "yyyy/MM/dd HH:mm",
+                        Locale.JAPAN
+                ).format(new Date(start));
+
+                long sec = (end - start) / 1000;
+                long min = sec / 60;
+                long remainSec = sec % 60;
+
+                String distanceText = String.format(
+                        Locale.JAPAN,
+                        "%.2f km",
+                        distance / 1000.0
+                );
+
+                String timeText = String.format(
+                        Locale.JAPAN,
+                        "%02d:%02d",
+                        min,
+                        remainSec
+                );
+
+                Button historyButton = new Button(this);
+                historyButton.setText(
+                        dateText + "\n" +
+                                distanceText + "\n" +
+                                timeText
+                );
+
+                historyButton.setOnClickListener(v -> {
+                    loadRouteOnMap(file);
+                    changeMode(AppMode.MAP);
+                });
+
+                historyList.addView(historyButton);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private String readTextFile(File file) throws Exception {
+        FileInputStream fis = new FileInputStream(file);
+
+        byte[] data = new byte[(int) file.length()];
+        fis.read(data);
+        fis.close();
+
+        return new String(data, StandardCharsets.UTF_8);
+    }
+
+    private void loadRouteOnMap(File file) {
+        try {
+            String jsonText = readTextFile(file);
+            JSONObject json = new JSONObject(jsonText);
+            JSONArray pointsArray = json.getJSONArray("points");
+
+            ArrayList<GeoPoint> geoPoints = new ArrayList<>();
+
+            for (int i = 0; i < pointsArray.length(); i++) {
+                JSONObject pointJson = pointsArray.getJSONObject(i);
+
+                double lat = pointJson.getDouble("lat");
+                double lon = pointJson.getDouble("lon");
+
+                geoPoints.add(new GeoPoint(lat, lon));
+            }
+
+            routeLine.setPoints(geoPoints);
+
+            if (!geoPoints.isEmpty()) {
+                map.getController().animateTo(geoPoints.get(0));
+                map.getController().setZoom(18.0);
+            }
+
+            map.invalidate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "履歴の読み込みに失敗しました", Toast.LENGTH_SHORT).show();
         }
     }
 }
