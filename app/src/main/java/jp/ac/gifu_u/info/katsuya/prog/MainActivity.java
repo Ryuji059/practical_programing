@@ -74,6 +74,27 @@ public class MainActivity extends AppCompatActivity {
     private TextView detailAverageSpeed;
     private TextView detailMaxGpsSpeed;
     private TextView detailMaxSectionSpeed;
+    // 日付・ルート名
+    private TextView detailDate;
+    private TextView detailRouteName;
+
+    // 走行分析
+    private TextView detailMovingTime;
+    private TextView detailStopTime;
+    private TextView detailStopCount;
+    private TextView detailLongestStopTime;
+    private TextView detailMovingAverageSpeed;
+
+    // 時間割合
+    private TextView detailMovingRatio;
+    private TextView detailStopRatio;
+
+    // 速度内訳
+    private TextView detailSpeed0to5;
+    private TextView detailSpeed5to10;
+    private TextView detailSpeed10to15;
+    private TextView detailSpeed15to20;
+    private TextView detailSpeed20Over;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -117,6 +138,20 @@ public class MainActivity extends AppCompatActivity {
         detailAverageSpeed = findViewById(R.id.detailAverageSpeed);
         detailMaxGpsSpeed = findViewById(R.id.detailMaxGpsSpeed);
         detailMaxSectionSpeed = findViewById(R.id.detailMaxSectionSpeed);
+        detailDate = findViewById(R.id.detailDate);
+        detailRouteName = findViewById(R.id.detailRouteName);
+        detailMovingTime = findViewById(R.id.detailMovingTime);
+        detailStopTime = findViewById(R.id.detailStopTime);
+        detailStopCount = findViewById(R.id.detailStopCount);
+        detailLongestStopTime = findViewById(R.id.detailLongestStopTime);
+        detailMovingAverageSpeed = findViewById(R.id.detailMovingAverageSpeed);
+        detailMovingRatio = findViewById(R.id.detailMovingRatio);
+        detailStopRatio = findViewById(R.id.detailStopRatio);
+        detailSpeed0to5 = findViewById(R.id.detailSpeed0to5);
+        detailSpeed5to10 = findViewById(R.id.detailSpeed5to10);
+        detailSpeed10to15 = findViewById(R.id.detailSpeed10to15);
+        detailSpeed15to20 = findViewById(R.id.detailSpeed15to20);
+        detailSpeed20Over = findViewById(R.id.detailSpeed20Over);
         //ボタンのID取得
         Button btnHistoryMode = findViewById(R.id.btnHistoryMode);
         Button btnRoadEditMode = findViewById(R.id.btnRoadEditMode);
@@ -604,32 +639,35 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadRouteOnHistoryMap(File file) {
         try {
-            //JSONファイルの読み込み
             String jsonText = readTextFile(file);
             JSONObject json = new JSONObject(jsonText);
             JSONArray pointsArray = json.getJSONArray("points");
 
-            //詳細情報の表示
-            double totalDistance = json.getDouble("totalDistance");
-            double averageSpeed = json.getDouble("averageSpeed");
             long startTime = json.getLong("startTime");
             long endTime = json.getLong("endTime");
+            double totalDistance = json.getDouble("totalDistance");
+            double averageSpeed = json.getDouble("averageSpeed");
 
             long elapsedSec = (endTime - startTime) / 1000;
-            long min = elapsedSec / 60;
-            long sec = elapsedSec % 60;
+
+            detailDate.setText(new SimpleDateFormat(
+                    "yyyy/MM/dd HH:mm",
+                    Locale.JAPAN
+            ).format(new Date(startTime)));
+
+            detailRouteName.setText("走行ルート");
 
             detailDistance.setText(String.format(
                     Locale.JAPAN,
-                    "距離: %.2f km",
+                    "走行距離: %.2f km",
                     totalDistance / 1000.0
             ));
 
             detailTime.setText(String.format(
                     Locale.JAPAN,
-                    "時間: %02d:%02d",
-                    min,
-                    sec
+                    "走行時間: %d分%02d秒",
+                    elapsedSec / 60,
+                    elapsedSec % 60
             ));
 
             detailAverageSpeed.setText(String.format(
@@ -639,68 +677,197 @@ public class MainActivity extends AppCompatActivity {
             ));
 
             double maxGpsSpeed = 0.0;
-
-            for (int i = 0; i < pointsArray.length(); i++) {
-                JSONObject pointJson = pointsArray.getJSONObject(i);
-
-                double speed = pointJson.getDouble("speed"); // m/s
-
-                if (speed > maxGpsSpeed) {
-                    maxGpsSpeed = speed;
-                }
-            }
-
             double maxSectionSpeed = 0.0;
 
-            JSONObject prev = null;
+            double movingTime = 0.0;
+            double stopTime = 0.0;
+            double longestStopTime = 0.0;
+            double currentStopTime = 0.0;
+            int stopCount = 0;
+            boolean wasStopping = false;
+
+            double speed0to5Time = 0.0;
+            double speed5to10Time = 0.0;
+            double speed10to15Time = 0.0;
+            double speed15to20Time = 0.0;
+            double speed20OverTime = 0.0;
+
+            ArrayList<GeoPoint> geoPoints = new ArrayList<>();
 
             for (int i = 0; i < pointsArray.length(); i++) {
                 JSONObject now = pointsArray.getJSONObject(i);
 
-                if (prev != null) {
-                    double prevDistance = prev.getDouble("distance");
-                    double nowDistance = now.getDouble("distance");
+                double lat = now.getDouble("lat");
+                double lon = now.getDouble("lon");
+                geoPoints.add(new GeoPoint(lat, lon));
 
-                    long prevTime = prev.getLong("time");
-                    long nowTime = now.getLong("time");
-
-                    double diffDistance = nowDistance - prevDistance; // m
-                    double diffTime = (nowTime - prevTime) / 1000.0;  // 秒
-
-                    if (diffTime > 0) {
-                        double sectionSpeed = diffDistance / diffTime; // m/s
-
-                        if (sectionSpeed > maxSectionSpeed) {
-                            maxSectionSpeed = sectionSpeed;
-                        }
-                    }
+                double gpsSpeed = now.getDouble("speed");
+                if (gpsSpeed > maxGpsSpeed) {
+                    maxGpsSpeed = gpsSpeed;
                 }
 
-                prev = now;
+                if (i == 0) {
+                    continue;
+                }
+
+                JSONObject prev = pointsArray.getJSONObject(i - 1);
+
+                double prevDistance = prev.getDouble("distance");
+                double nowDistance = now.getDouble("distance");
+
+                long prevTime = prev.getLong("time");
+                long nowTime = now.getLong("time");
+
+                double diffDistance = nowDistance - prevDistance;
+                double diffTime = (nowTime - prevTime) / 1000.0;
+
+                if (diffTime <= 0) {
+                    continue;
+                }
+
+                double sectionSpeed = diffDistance / diffTime; // m/s
+                double sectionSpeedKmh = sectionSpeed * 3.6;
+
+                if (sectionSpeed > maxSectionSpeed) {
+                    maxSectionSpeed = sectionSpeed;
+                }
+
+                // 2km/h未満を停止扱い
+                if (sectionSpeedKmh < 2.0) {
+                    stopTime += diffTime;
+                    currentStopTime += diffTime;
+
+                    if (!wasStopping) {
+                        stopCount++;
+                        wasStopping = true;
+                    }
+
+                    if (currentStopTime > longestStopTime) {
+                        longestStopTime = currentStopTime;
+                    }
+
+                } else {
+                    movingTime += diffTime;
+                    currentStopTime = 0.0;
+                    wasStopping = false;
+
+                    if (sectionSpeedKmh < 5.0) {
+                        speed0to5Time += diffTime;
+                    } else if (sectionSpeedKmh < 10.0) {
+                        speed5to10Time += diffTime;
+                    } else if (sectionSpeedKmh < 15.0) {
+                        speed10to15Time += diffTime;
+                    } else if (sectionSpeedKmh < 20.0) {
+                        speed15to20Time += diffTime;
+                    } else {
+                        speed20OverTime += diffTime;
+                    }
+                }
             }
+
+            double movingAverageSpeed = 0.0;
+            if (movingTime > 0) {
+                movingAverageSpeed = totalDistance / movingTime; // m/s
+            }
+
+            double movingRatio = 0.0;
+            double stopRatio = 0.0;
+            if (elapsedSec > 0) {
+                movingRatio = movingTime / elapsedSec * 100.0;
+                stopRatio = stopTime / elapsedSec * 100.0;
+            }
+
+            double totalMovingTimeForSpeed = movingTime;
+            if (totalMovingTimeForSpeed <= 0) {
+                totalMovingTimeForSpeed = 1.0;
+            }
+
+            detailMovingTime.setText(String.format(
+                    Locale.JAPAN,
+                    "移動時間: %d分%02d秒",
+                    (long) movingTime / 60,
+                    (long) movingTime % 60
+            ));
+
+            detailStopTime.setText(String.format(
+                    Locale.JAPAN,
+                    "停止時間: %d分%02d秒",
+                    (long) stopTime / 60,
+                    (long) stopTime % 60
+            ));
+
+            detailStopCount.setText(String.format(
+                    Locale.JAPAN,
+                    "停止回数: %d回",
+                    stopCount
+            ));
+
+            detailLongestStopTime.setText(String.format(
+                    Locale.JAPAN,
+                    "最長停止時間: %d分%02d秒",
+                    (long) longestStopTime / 60,
+                    (long) longestStopTime % 60
+            ));
+
+            detailMovingAverageSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "移動中平均速度: %.1f km/h",
+                    movingAverageSpeed * 3.6
+            ));
+
+            detailMaxSectionSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "最高区間速度: %.1f km/h",
+                    maxSectionSpeed * 3.6
+            ));
+
+            detailMovingRatio.setText(String.format(
+                    Locale.JAPAN,
+                    "移動: %.1f%%",
+                    movingRatio
+            ));
+
+            detailStopRatio.setText(String.format(
+                    Locale.JAPAN,
+                    "停止: %.1f%%",
+                    stopRatio
+            ));
+
+            detailSpeed0to5.setText(String.format(
+                    Locale.JAPAN,
+                    "0～5 km/h: %.1f%%",
+                    speed0to5Time / totalMovingTimeForSpeed * 100.0
+            ));
+
+            detailSpeed5to10.setText(String.format(
+                    Locale.JAPAN,
+                    "5～10 km/h: %.1f%%",
+                    speed5to10Time / totalMovingTimeForSpeed * 100.0
+            ));
+
+            detailSpeed10to15.setText(String.format(
+                    Locale.JAPAN,
+                    "10～15 km/h: %.1f%%",
+                    speed10to15Time / totalMovingTimeForSpeed * 100.0
+            ));
+
+            detailSpeed15to20.setText(String.format(
+                    Locale.JAPAN,
+                    "15～20 km/h: %.1f%%",
+                    speed15to20Time / totalMovingTimeForSpeed * 100.0
+            ));
+
+            detailSpeed20Over.setText(String.format(
+                    Locale.JAPAN,
+                    "20 km/h～: %.1f%%",
+                    speed20OverTime / totalMovingTimeForSpeed * 100.0
+            ));
 
             detailMaxGpsSpeed.setText(String.format(
                     Locale.JAPAN,
                     "最高GPS速度: %.1f km/h",
                     maxGpsSpeed * 3.6
             ));
-
-            detailMaxSectionSpeed.setText(String.format(
-                    Locale.JAPAN,
-                    "最高区間平均速度: %.1f km/h",
-                    maxSectionSpeed * 3.6
-            ));
-
-            ArrayList<GeoPoint> geoPoints = new ArrayList<>();
-
-            for (int i = 0; i < pointsArray.length(); i++) {
-                JSONObject pointJson = pointsArray.getJSONObject(i);
-
-                double lat = pointJson.getDouble("lat");
-                double lon = pointJson.getDouble("lon");
-
-                geoPoints.add(new GeoPoint(lat, lon));
-            }
 
             historyRouteLine.setPoints(geoPoints);
 

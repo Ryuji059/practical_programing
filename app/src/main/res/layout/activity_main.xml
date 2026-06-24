@@ -257,50 +257,202 @@
             <LinearLayout
                 android:id="@+id/routeDetailPanel"
                 android:layout_width="match_parent"
-                android:layout_height="300dp"
+                android:layout_height="450dp"
                 android:layout_gravity="bottom"
                 android:orientation="vertical"
                 android:padding="16dp"
                 android:background="#FFFFFF"
-                android:translationY="240dp">
+                android:translationY="390dp">
 
                 <TextView
                     android:id="@+id/detailHandle"
                     android:layout_width="match_parent"
                     android:layout_height="40dp"
                     android:gravity="center"
-                    android:text="▲ 詳細" />
+                    android:text="▲ 詳細"
+                    android:textSize="22sp" />
 
-                <TextView
-                    android:id="@+id/detailDistance"
+                <ScrollView
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="距離: -" />
+                    android:layout_height="match_parent">
 
-                <TextView
-                    android:id="@+id/detailTime"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="時間: -" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/detailAverageSpeed"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="平均速度: -" />
+                        <TextView
+                            android:id="@+id/detailDate"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="2026/06/25 14:03"
+                            android:textSize="18sp" />
 
-                <TextView
-                    android:id="@+id/detailMaxGpsSpeed"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="最高GPS速度: -" />
+                        <TextView
+                            android:id="@+id/detailRouteName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="走行ルート"
+                            android:textSize="18sp"
+                            android:layout_marginBottom="12dp" />
 
-                <TextView
-                    android:id="@+id/detailMaxSectionSpeed"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="最高区間平均速度: -" />
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="【基本情報】"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
 
+                        <TextView
+                            android:id="@+id/detailDistance"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="走行距離: -"
+                            android:textSize="18sp" />
+                        <TextView
+                            android:id="@+id/detailTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="走行時間: -"
+                            android:textSize="18sp" />
+                        <TextView
+                            android:id="@+id/detailAverageSpeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="平均速度: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="【走行分析】"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="12dp" />
+
+                        <TextView
+                            android:id="@+id/detailMovingTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="移動時間: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailStopTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="停止時間: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailStopCount"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="停止回数: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailLongestStopTime"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="最長停止時間: -"
+                            android:textSize="18sp" />
+                        <TextView
+                            android:id="@+id/detailMovingAverageSpeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="移動中平均速度: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailMaxSectionSpeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="最高区間速度: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="【時間割合】"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="12dp" />
+
+                        <TextView
+                            android:id="@+id/detailMovingRatio"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="移動: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailStopRatio"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="停止: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="【速度内訳】"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="12dp" />
+
+                        <TextView
+                            android:id="@+id/detailSpeed0to5"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="0～5 km/h: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailSpeed5to10"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="5～10 km/h: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailSpeed10to15"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="10～15 km/h: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailSpeed15to20"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="15～20 km/h: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:id="@+id/detailSpeed20Over"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="20 km/h～: -"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="【参考】"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="12dp" />
+
+                        <TextView
+                            android:id="@+id/detailMaxGpsSpeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="最高GPS速度: -"
+                            android:textSize="18sp" />
+
+                    </LinearLayout>
+                </ScrollView>
             </LinearLayout>
 
         </FrameLayout>
