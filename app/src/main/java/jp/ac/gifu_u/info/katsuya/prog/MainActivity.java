@@ -40,10 +40,11 @@ import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
-        MAP,        // 通常地図
-        RECORDING, // 記録中
-        HISTORY,   // 履歴表示
-        EDIT_ROAD  // 道路色分け
+        MAP,            // 通常地図
+        RECORDING,      // 記録中
+        HISTORY,        // 履歴表示
+        HISTORY_DETAIL, // 走行経路の表示
+        EDIT_ROAD       // 道路色分け
     }
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
@@ -63,6 +64,16 @@ public class MainActivity extends AppCompatActivity {
     private View roadEditPanel;
     private TextView titleBar;
     private LinearLayout historyList;
+    private MapView historyMap;
+    private View historyDetailLayout;
+    private Polyline historyRouteLine;
+    private View routeDetailPanel;
+    private boolean detailPanelOpen = false;
+    private TextView detailDistance;
+    private TextView detailTime;
+    private TextView detailAverageSpeed;
+    private TextView detailMaxGpsSpeed;
+    private TextView detailMaxSectionSpeed;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -88,21 +99,41 @@ public class MainActivity extends AppCompatActivity {
         roadEditPanel = findViewById(R.id.roadEditPanel);
         titleBar = findViewById(R.id.titleBar);
         historyList = findViewById(R.id.historyList);
+        //走行経路表示用のMAPの初期化
+        historyDetailLayout = findViewById(R.id.historyDetailLayout);
+
+        historyMap = findViewById(R.id.historyMap);
+        historyMap.setTileSource(TileSourceFactory.MAPNIK);
+        historyMap.setMultiTouchControls(true);
+
+        historyRouteLine = new Polyline();
+        historyRouteLine.setColor(Color.BLUE);
+        historyRouteLine.setWidth(8.0f);
+        historyMap.getOverlays().add(historyRouteLine);
+        //詳細データ表示用レイアウト群の取得
+        routeDetailPanel = findViewById(R.id.routeDetailPanel);
+        detailDistance = findViewById(R.id.detailDistance);
+        detailTime = findViewById(R.id.detailTime);
+        detailAverageSpeed = findViewById(R.id.detailAverageSpeed);
+        detailMaxGpsSpeed = findViewById(R.id.detailMaxGpsSpeed);
+        detailMaxSectionSpeed = findViewById(R.id.detailMaxSectionSpeed);
         //ボタンのID取得
         Button btnHistoryMode = findViewById(R.id.btnHistoryMode);
         Button btnRoadEditMode = findViewById(R.id.btnRoadEditMode);
-        Button btnBackMap = findViewById(R.id.btnBackMap);
+        TextView btnBackMapFromHistory = findViewById(R.id.btnBackMapFromHistory);
         Button btnSaveRoadEdit = findViewById(R.id.btnSaveRoadEdit);
         Button btnFinishRoadEdit = findViewById(R.id.btnFinishRoadEdit);
+        TextView btnBackHistory = findViewById(R.id.btnBackHistory);
 
         //各種ボタンの機能実装
         btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
         btnRoadEditMode.setOnClickListener(v -> changeMode(AppMode.EDIT_ROAD));
-        btnBackMap.setOnClickListener(v -> changeMode(AppMode.MAP));
+        btnBackMapFromHistory.setOnClickListener(v -> changeMode(AppMode.MAP));
         btnSaveRoadEdit.setOnClickListener(v -> {
             // 色分けデータをJSONに保存
         });
         btnFinishRoadEdit.setOnClickListener(v -> {changeMode(AppMode.MAP);});
+        btnBackHistory.setOnClickListener(v -> changeMode(AppMode.HISTORY));
 
 
         //現在地を画面の中心に持ってくるボタン
@@ -119,6 +150,8 @@ public class MainActivity extends AppCompatActivity {
 
         //線を引くための準備
         routeLine = new Polyline();
+        routeLine.setColor(Color.BLUE);
+        routeLine.setWidth(8.0f);
         map.getOverlays().add(routeLine);
 
         //記録開始、停止ボタン
@@ -174,6 +207,17 @@ public class MainActivity extends AppCompatActivity {
             //終了を通知
             Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
         });
+
+        //走行履歴の詳細データの表示用パネルの設定
+        routeDetailPanel.setOnClickListener(v -> {
+            if (detailPanelOpen) {
+                routeDetailPanel.animate().translationY(dp(240)).setDuration(250).start();
+                detailPanelOpen = false;
+            } else {
+                routeDetailPanel.animate().translationY(0f).setDuration(250).start();
+                detailPanelOpen = true;
+            }
+        });
         startLocationUpdates();
         changeMode(AppMode.MAP);
     }
@@ -185,6 +229,9 @@ public class MainActivity extends AppCompatActivity {
         if (map != null) {
             map.onResume();
         }
+        if (historyMap != null) {
+            historyMap.onResume();
+        }
     }
 
     @Override
@@ -192,6 +239,9 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();//地図通信の停止
         if (map != null) {
             map.onPause();
+        }
+        if (historyMap != null) {
+            historyMap.onPause();
         }
     }
 
@@ -395,35 +445,40 @@ public class MainActivity extends AppCompatActivity {
     private void changeMode(AppMode mode) {
         currentMode = mode;
 
+        mapLayout.setVisibility(View.GONE);
+        historyLayout.setVisibility(View.GONE);
+        historyDetailLayout.setVisibility(View.GONE);
+
         if (mode == AppMode.HISTORY) {
-            mapLayout.setVisibility(View.GONE);
             historyLayout.setVisibility(View.VISIBLE);
             isRecording = false;
-
             loadHistoryList();
-
             return;
-        } else {
-            mapLayout.setVisibility(View.VISIBLE);
-            historyLayout.setVisibility(View.GONE);
+        }
 
-            if (mode == AppMode.MAP) {
-                titleBar.setText("自転車安全マップ");
-                titleBar.setBackgroundColor(Color.rgb(67, 160, 71));
-                recordPanel.setVisibility(View.VISIBLE);
-                roadEditPanel.setVisibility(View.GONE);
-            } else if (mode == AppMode.EDIT_ROAD) {
-                titleBar.setText("色分けモード");
-                titleBar.setBackgroundColor(Color.rgb(70, 170, 220));
-                recordPanel.setVisibility(View.GONE);
-                roadEditPanel.setVisibility(View.VISIBLE);
-                isRecording = false;
-                Log.d("MODE", "EDIT_ROAD");
-            } else if (mode == AppMode.RECORDING) {
-                titleBar.setText("記録中");
-                recordPanel.setVisibility(View.VISIBLE);
-                roadEditPanel.setVisibility(View.GONE);
-            }
+        if (mode == AppMode.HISTORY_DETAIL) {
+            historyDetailLayout.setVisibility(View.VISIBLE);
+            isRecording = false;
+            return;
+        }
+
+        mapLayout.setVisibility(View.VISIBLE);
+
+        if (mode == AppMode.MAP) {
+            titleBar.setText("自転車安全マップ");
+            titleBar.setBackgroundColor(Color.rgb(67, 160, 71));
+            recordPanel.setVisibility(View.VISIBLE);
+            roadEditPanel.setVisibility(View.GONE);
+        } else if (mode == AppMode.EDIT_ROAD) {
+            titleBar.setText("色分けモード");
+            titleBar.setBackgroundColor(Color.rgb(70, 170, 220));
+            recordPanel.setVisibility(View.GONE);
+            roadEditPanel.setVisibility(View.VISIBLE);
+            isRecording = false;
+        } else if (mode == AppMode.RECORDING) {
+            titleBar.setText("記録中");
+            recordPanel.setVisibility(View.VISIBLE);
+            roadEditPanel.setVisibility(View.GONE);
         }
     }
 
@@ -493,8 +548,8 @@ public class MainActivity extends AppCompatActivity {
                 );
 
                 historyButton.setOnClickListener(v -> {
-                    loadRouteOnMap(file);
-                    changeMode(AppMode.MAP);
+                    loadRouteOnHistoryMap(file);
+                    changeMode(AppMode.HISTORY_DETAIL);
                 });
 
                 historyList.addView(historyButton);
@@ -545,5 +600,124 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             Toast.makeText(this, "履歴の読み込みに失敗しました", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void loadRouteOnHistoryMap(File file) {
+        try {
+            //JSONファイルの読み込み
+            String jsonText = readTextFile(file);
+            JSONObject json = new JSONObject(jsonText);
+            JSONArray pointsArray = json.getJSONArray("points");
+
+            //詳細情報の表示
+            double totalDistance = json.getDouble("totalDistance");
+            double averageSpeed = json.getDouble("averageSpeed");
+            long startTime = json.getLong("startTime");
+            long endTime = json.getLong("endTime");
+
+            long elapsedSec = (endTime - startTime) / 1000;
+            long min = elapsedSec / 60;
+            long sec = elapsedSec % 60;
+
+            detailDistance.setText(String.format(
+                    Locale.JAPAN,
+                    "距離: %.2f km",
+                    totalDistance / 1000.0
+            ));
+
+            detailTime.setText(String.format(
+                    Locale.JAPAN,
+                    "時間: %02d:%02d",
+                    min,
+                    sec
+            ));
+
+            detailAverageSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "平均速度: %.1f km/h",
+                    averageSpeed * 3.6
+            ));
+
+            double maxGpsSpeed = 0.0;
+
+            for (int i = 0; i < pointsArray.length(); i++) {
+                JSONObject pointJson = pointsArray.getJSONObject(i);
+
+                double speed = pointJson.getDouble("speed"); // m/s
+
+                if (speed > maxGpsSpeed) {
+                    maxGpsSpeed = speed;
+                }
+            }
+
+            double maxSectionSpeed = 0.0;
+
+            JSONObject prev = null;
+
+            for (int i = 0; i < pointsArray.length(); i++) {
+                JSONObject now = pointsArray.getJSONObject(i);
+
+                if (prev != null) {
+                    double prevDistance = prev.getDouble("distance");
+                    double nowDistance = now.getDouble("distance");
+
+                    long prevTime = prev.getLong("time");
+                    long nowTime = now.getLong("time");
+
+                    double diffDistance = nowDistance - prevDistance; // m
+                    double diffTime = (nowTime - prevTime) / 1000.0;  // 秒
+
+                    if (diffTime > 0) {
+                        double sectionSpeed = diffDistance / diffTime; // m/s
+
+                        if (sectionSpeed > maxSectionSpeed) {
+                            maxSectionSpeed = sectionSpeed;
+                        }
+                    }
+                }
+
+                prev = now;
+            }
+
+            detailMaxGpsSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "最高GPS速度: %.1f km/h",
+                    maxGpsSpeed * 3.6
+            ));
+
+            detailMaxSectionSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "最高区間平均速度: %.1f km/h",
+                    maxSectionSpeed * 3.6
+            ));
+
+            ArrayList<GeoPoint> geoPoints = new ArrayList<>();
+
+            for (int i = 0; i < pointsArray.length(); i++) {
+                JSONObject pointJson = pointsArray.getJSONObject(i);
+
+                double lat = pointJson.getDouble("lat");
+                double lon = pointJson.getDouble("lon");
+
+                geoPoints.add(new GeoPoint(lat, lon));
+            }
+
+            historyRouteLine.setPoints(geoPoints);
+
+            if (!geoPoints.isEmpty()) {
+                historyMap.getController().setZoom(18.0);
+                historyMap.getController().animateTo(geoPoints.get(0));
+            }
+
+            historyMap.invalidate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "履歴の読み込みに失敗しました", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private float dp(float value) {
+        return value * getResources().getDisplayMetrics().density;
     }
 }
