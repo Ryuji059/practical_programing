@@ -58,43 +58,43 @@ public class MainActivity extends AppCompatActivity {
     private double totalDistance = 0.0;//記録中の走行距離
     private RoutePoint lastRoutePoint = null;//今の地点
     private AppMode currentMode = AppMode.MAP;//現在のモード
-    private View mapLayout;
-    private View historyLayout;
-    private View recordPanel;
-    private View roadEditPanel;
-    private TextView titleBar;
-    private LinearLayout historyList;
-    private MapView historyMap;
-    private View historyDetailLayout;
-    private Polyline historyRouteLine;
-    private View routeDetailPanel;
-    private boolean detailPanelOpen = false;
-    private TextView detailDistance;
-    private TextView detailTime;
-    private TextView detailAverageSpeed;
-    private TextView detailMaxGpsSpeed;
-    private TextView detailMaxSectionSpeed;
+    private View mapLayout;//マップ表示
+    private View historyLayout;//走行履歴表示
+    private View recordPanel;//記録関係のパネル
+    private View roadEditPanel;//色分けのパネル
+    private TextView titleBar;//画面上部のタイトルバー
+    private LinearLayout historyList;//走行履歴の表示用リスト
+    private MapView historyMap;//走行履歴のルート表示用のMAP
+    private View historyDetailLayout;//走行データの詳細表示用のレイアウト
+    private Polyline historyRouteLine;//走行履歴のルートの線
+    private View routeDetailPanel;//走行詳細用のパネル
+    private boolean detailPanelOpen = false;//詳細を開いているかどうかのフラグ
+    private TextView detailDistance;//走行距離を表示
+    private TextView detailTime;//走行時間の表示
+    private TextView detailAverageSpeed;//平均速度の表示
+    private TextView detailMaxGpsSpeed;//最大GPS速度の表示
+    private TextView detailMaxSectionSpeed;//最大区間平均速度の表示
     // 日付・ルート名
     private TextView detailDate;
     private TextView detailRouteName;
 
     // 走行分析
-    private TextView detailMovingTime;
-    private TextView detailStopTime;
-    private TextView detailStopCount;
-    private TextView detailLongestStopTime;
-    private TextView detailMovingAverageSpeed;
+    private TextView detailMovingTime;//移動時間
+    private TextView detailStopTime;//停止時間
+    private TextView detailStopCount;//停止回数
+    private TextView detailLongestStopTime;//最長停止時間
+    private TextView detailMovingAverageSpeed;//移動速度の平均
 
     // 時間割合
-    private TextView detailMovingRatio;
-    private TextView detailStopRatio;
+    private TextView detailMovingRatio;//移動時間の割合
+    private TextView detailStopRatio;//停止時間の割合
 
     // 速度内訳
-    private TextView detailSpeed0to5;
-    private TextView detailSpeed5to10;
-    private TextView detailSpeed10to15;
-    private TextView detailSpeed15to20;
-    private TextView detailSpeed20Over;
+    private TextView detailSpeed0to5;//0~5km/hの走行速度の割合
+    private TextView detailSpeed5to10;//5~10km/hの走行速度の割合
+    private TextView detailSpeed10to15;//10~15km/hの走行速度の割合
+    private TextView detailSpeed15to20;//15~20km/hの走行速度の割合
+    private TextView detailSpeed20Over;//20km/h~の走行速度の割合
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -124,14 +124,14 @@ public class MainActivity extends AppCompatActivity {
         historyDetailLayout = findViewById(R.id.historyDetailLayout);
 
         historyMap = findViewById(R.id.historyMap);
-        historyMap.setTileSource(TileSourceFactory.MAPNIK);
-        historyMap.setMultiTouchControls(true);
+        historyMap.setTileSource(TileSourceFactory.MAPNIK);//地図のタイプを設定
+        historyMap.setMultiTouchControls(true);//日本指で操作可能に
 
         historyRouteLine = new Polyline();
-        historyRouteLine.setColor(Color.BLUE);
-        historyRouteLine.setWidth(8.0f);
-        historyMap.getOverlays().add(historyRouteLine);
-        //詳細データ表示用レイアウト群の取得
+        historyRouteLine.setColor(Color.BLUE);//走行履歴のルート表示を青色に
+        historyRouteLine.setWidth(8.0f);//フォントサイズの設定
+        historyMap.getOverlays().add(historyRouteLine);//地図の上に線を表示できるようにする
+        //詳細データ表示用のID取得
         routeDetailPanel = findViewById(R.id.routeDetailPanel);
         detailDistance = findViewById(R.id.detailDistance);
         detailTime = findViewById(R.id.detailTime);
@@ -213,8 +213,8 @@ public class MainActivity extends AppCompatActivity {
             //現在地の記録
             if (currentPoint != null) {
                 RoutePoint firstPoint = new RoutePoint(
-                        currentPoint.getLatitude(),
-                        currentPoint.getLongitude(),
+                        currentPoint.getLatitude(),//緯度
+                        currentPoint.getLongitude(),//経度
                         startTime,
                         0.0f,
                         0.0
@@ -245,16 +245,16 @@ public class MainActivity extends AppCompatActivity {
 
         //走行履歴の詳細データの表示用パネルの設定
         routeDetailPanel.setOnClickListener(v -> {
-            if (detailPanelOpen) {
+            if (detailPanelOpen) {//詳細欄を触ったら、下から上に上がってくるモーションをする。
                 routeDetailPanel.animate().translationY(dp(240)).setDuration(250).start();
                 detailPanelOpen = false;
-            } else {
+            } else {//閉じるときのアニメーションを追加
                 routeDetailPanel.animate().translationY(0f).setDuration(250).start();
                 detailPanelOpen = true;
             }
         });
-        startLocationUpdates();
-        changeMode(AppMode.MAP);
+        startLocationUpdates();//GPS情報の取得を開始
+        changeMode(AppMode.MAP);//マップモードを地図に変更する
     }
 
 
@@ -347,8 +347,8 @@ public class MainActivity extends AppCompatActivity {
                     map.getOverlays().add(currentMarker);
                 }
 
-                currentMarker.setPosition(currentPoint);
-                currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+                currentMarker.setPosition(currentPoint);//現在地にピンの位置を更新
+                currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);//マーカーを立てる
 
                 map.invalidate();
             }
@@ -431,7 +431,7 @@ public class MainActivity extends AppCompatActivity {
             double averageSpeed = 0.0;
 
             if (elapsedSec > 0) {
-                averageSpeed = totalDistance / elapsedSec; // m/s
+                averageSpeed = totalDistance / elapsedSec; // ここではm/sであることに注意されたし
             }
 
             routeJson.put("averageSpeed", averageSpeed);//平均速度をJSONに入れる
@@ -472,57 +472,60 @@ public class MainActivity extends AppCompatActivity {
             //保存が成功したことを通知
             Toast.makeText(this, "保存しました: " + fileName, Toast.LENGTH_SHORT).show();
 
-        } catch (Exception e) {
+        } catch (Exception e) {//保存失敗時
             e.printStackTrace();
             Toast.makeText(this, "保存に失敗しました", Toast.LENGTH_SHORT).show();
         }
     }
-    private void changeMode(AppMode mode) {
-        currentMode = mode;
 
+    private void changeMode(AppMode mode) {
+        currentMode = mode;//モードを変更
+
+        //全モードのレイアウトを非表示にする
         mapLayout.setVisibility(View.GONE);
         historyLayout.setVisibility(View.GONE);
         historyDetailLayout.setVisibility(View.GONE);
 
-        if (mode == AppMode.HISTORY) {
-            historyLayout.setVisibility(View.VISIBLE);
-            isRecording = false;
-            loadHistoryList();
+        if (mode == AppMode.HISTORY) {//履歴モードの場合
+            historyLayout.setVisibility(View.VISIBLE);//履歴用のレイアウトを表示
+            isRecording = false;//記録中なら記録を終了する
+            loadHistoryList();//走行履歴のリストを表示
             return;
         }
 
-        if (mode == AppMode.HISTORY_DETAIL) {
-            historyDetailLayout.setVisibility(View.VISIBLE);
-            isRecording = false;
+        if (mode == AppMode.HISTORY_DETAIL) {//走行ルートの場合
+            historyDetailLayout.setVisibility(View.VISIBLE);//ルート表示用のレイアウトを表示
+            isRecording = false;//記録中なら記録を終了する
             return;
         }
 
+        //これ以降はすべてMAPレイアウト状に表示するモードである
         mapLayout.setVisibility(View.VISIBLE);
 
-        if (mode == AppMode.MAP) {
-            titleBar.setText("自転車安全マップ");
-            titleBar.setBackgroundColor(Color.rgb(67, 160, 71));
-            recordPanel.setVisibility(View.VISIBLE);
-            roadEditPanel.setVisibility(View.GONE);
-        } else if (mode == AppMode.EDIT_ROAD) {
-            titleBar.setText("色分けモード");
-            titleBar.setBackgroundColor(Color.rgb(70, 170, 220));
-            recordPanel.setVisibility(View.GONE);
-            roadEditPanel.setVisibility(View.VISIBLE);
+        if (mode == AppMode.MAP) {//通常モードの場合
+            titleBar.setText("自転車安全マップ");//タイトルバーの表記を変更
+            titleBar.setBackgroundColor(Color.rgb(67, 160, 71));//タイトルバーの色を変更
+            recordPanel.setVisibility(View.VISIBLE);//記録と保存のボタンを表示
+            roadEditPanel.setVisibility(View.GONE);//色分け用のボタンを非表示に
+        } else if (mode == AppMode.EDIT_ROAD) {//色分けモードの場合
+            titleBar.setText("色分けモード");//タイトルバーの表記を変更
+            titleBar.setBackgroundColor(Color.rgb(70, 170, 220));//タイトルバーの色を変更
+            recordPanel.setVisibility(View.GONE);//記録用のボタンを非表示に
+            roadEditPanel.setVisibility(View.VISIBLE);//色分け用のボタンを表示
             isRecording = false;
-        } else if (mode == AppMode.RECORDING) {
-            titleBar.setText("記録中");
-            recordPanel.setVisibility(View.VISIBLE);
-            roadEditPanel.setVisibility(View.GONE);
+        } else if (mode == AppMode.RECORDING) {//記録中の場合
+            titleBar.setText("記録中");//タイトルバーの表記を変更
+            recordPanel.setVisibility(View.VISIBLE);//記録と保存のボタンを表示
+            roadEditPanel.setVisibility(View.GONE);//色分け用のボタンを非表示に
         }
     }
 
     private void loadHistoryList() {
-        historyList.removeAllViews();
+        historyList.removeAllViews();//リストの初期化
 
-        File routeDir = new File(getFilesDir(), "routes");
+        File routeDir = new File(getFilesDir(), "routes");//ディレクトリの読み込み
 
-        if (!routeDir.exists()) {
+        if (!routeDir.exists()) {//ない場合は「保存された走行履歴はありません」と表示
             TextView emptyText = new TextView(this);
             emptyText.setText("保存された走行履歴はありません");
             emptyText.setTextSize(18);
@@ -530,9 +533,9 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        File[] files = routeDir.listFiles();
+        File[] files = routeDir.listFiles();//ディレクトリ内のファイルを読み込み
 
-        if (files == null || files.length == 0) {
+        if (files == null || files.length == 0) {//ない場合は「保存された走行履歴はありません」と表示
             TextView emptyText = new TextView(this);
             emptyText.setText("保存された走行履歴はありません");
             emptyText.setTextSize(18);
@@ -541,17 +544,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         for (File file : files) {
-            if (!file.getName().endsWith(".json")) {
+            if (!file.getName().endsWith(".json")) {//ファイルの拡張子が.json出ない場合はスキップ
                 continue;
             }
 
-            try {
+            try {//ファイルの中身を見る
                 String jsonText = readTextFile(file);
                 JSONObject json = new JSONObject(jsonText);
-
-                long start = json.getLong("startTime");
-                long end = json.getLong("endTime");
-                double distance = json.getDouble("totalDistance");
+                //見出しに使う譲歩を取得
+                long start = json.getLong("startTime");//記録開始時刻
+                long end = json.getLong("endTime");//記録終了時刻
+                double distance = json.getDouble("totalDistance");//走行距離
 
                 String dateText = new SimpleDateFormat(
                         "yyyy/MM/dd HH:mm",
@@ -574,45 +577,48 @@ public class MainActivity extends AppCompatActivity {
                         min,
                         remainSec
                 );
-
+                //ボタンを作成(タイトル、走行距離、走行時間を表示)押されるとその履歴のルート等を見れるようになります
                 Button historyButton = new Button(this);
                 historyButton.setText(
                         dateText + "\n" +
                                 distanceText + "\n" +
                                 timeText
                 );
-
+                //押されたときの処理
                 historyButton.setOnClickListener(v -> {
-                    loadRouteOnHistoryMap(file);
-                    changeMode(AppMode.HISTORY_DETAIL);
+                    loadRouteOnHistoryMap(file);//ファイルを読み込み走行履歴を表示
+                    changeMode(AppMode.HISTORY_DETAIL);//モードを変更
                 });
 
-                historyList.addView(historyButton);
+                historyList.addView(historyButton);//listにボタンを追加
 
-            } catch (Exception e) {
+            } catch (Exception e) {//エラー処理
                 e.printStackTrace();
             }
         }
     }
 
+    //ファイルを読み込む関数
     private String readTextFile(File file) throws Exception {
-        FileInputStream fis = new FileInputStream(file);
+        FileInputStream fis = new FileInputStream(file);//ファイルの読み込み用のストリーム
 
-        byte[] data = new byte[(int) file.length()];
-        fis.read(data);
-        fis.close();
+        byte[] data = new byte[(int) file.length()];//読み込んだ値を入れる
+        fis.read(data);//ファイル読み込み
+        fis.close();//ファイルを閉じる
 
-        return new String(data, StandardCharsets.UTF_8);
+        return new String(data, StandardCharsets.UTF_8);//読み込んだデータを文字データとして返す。(UTF-8でエンコード)
     }
 
+    //履歴用に別のマップを使う前の関数、地図上に走行履歴を表示する。
     private void loadRouteOnMap(File file) {
         try {
-            String jsonText = readTextFile(file);
-            JSONObject json = new JSONObject(jsonText);
-            JSONArray pointsArray = json.getJSONArray("points");
+            String jsonText = readTextFile(file);//ファイルデータの取得
+            JSONObject json = new JSONObject(jsonText);//JSONオブジェクトを生成(先ほど読みこんんだデータで)
+            JSONArray pointsArray = json.getJSONArray("points");//JSON内のpointsという配列を読み込みArrayに
 
-            ArrayList<GeoPoint> geoPoints = new ArrayList<>();
+            ArrayList<GeoPoint> geoPoints = new ArrayList<>();//GeoPoint用の配列(後々線を引くために使用する)
 
+            //pointsArray内のデータからgeoPointsにデータを入れる
             for (int i = 0; i < pointsArray.length(); i++) {
                 JSONObject pointJson = pointsArray.getJSONObject(i);
 
@@ -622,14 +628,14 @@ public class MainActivity extends AppCompatActivity {
                 geoPoints.add(new GeoPoint(lat, lon));
             }
 
-            routeLine.setPoints(geoPoints);
+            routeLine.setPoints(geoPoints);//線を引くための点を追加
 
-            if (!geoPoints.isEmpty()) {
-                map.getController().animateTo(geoPoints.get(0));
-                map.getController().setZoom(18.0);
+            if (!geoPoints.isEmpty()) {//点がゼロ個でない場合
+                map.getController().animateTo(geoPoints.get(0));//地図の中心を最初の点に移動
+                map.getController().setZoom(18.0);//縮尺を変更
             }
 
-            map.invalidate();
+            map.invalidate();//線を可視化する
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -639,17 +645,19 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadRouteOnHistoryMap(File file) {
         try {
-            String jsonText = readTextFile(file);
-            JSONObject json = new JSONObject(jsonText);
-            JSONArray pointsArray = json.getJSONArray("points");
+            String jsonText = readTextFile(file);//ファイルデータの取得
+            JSONObject json = new JSONObject(jsonText);//JSONオブジェクトを生成(先ほど読みこんんだデータで)
+            JSONArray pointsArray = json.getJSONArray("points");//JSON内のpointsという配列を読み込みArrayに
 
-            long startTime = json.getLong("startTime");
-            long endTime = json.getLong("endTime");
-            double totalDistance = json.getDouble("totalDistance");
-            double averageSpeed = json.getDouble("averageSpeed");
+            //初期化
+            long startTime = json.getLong("startTime");//記録開始時間
+            long endTime = json.getLong("endTime");//記録終了時刻
+            double totalDistance = json.getDouble("totalDistance");//走行距離
+            double averageSpeed = json.getDouble("averageSpeed");//平均速度
 
-            long elapsedSec = (endTime - startTime) / 1000;
+            long elapsedSec = (endTime - startTime) / 1000;//記録時間
 
+            //記録日の表示
             detailDate.setText(new SimpleDateFormat(
                     "yyyy/MM/dd HH:mm",
                     Locale.JAPAN
@@ -657,12 +665,14 @@ public class MainActivity extends AppCompatActivity {
 
             detailRouteName.setText("走行ルート");
 
+            //走行距離の表示
             detailDistance.setText(String.format(
                     Locale.JAPAN,
                     "走行距離: %.2f km",
                     totalDistance / 1000.0
             ));
 
+            //走行時間の表示
             detailTime.setText(String.format(
                     Locale.JAPAN,
                     "走行時間: %d分%02d秒",
@@ -670,37 +680,40 @@ public class MainActivity extends AppCompatActivity {
                     elapsedSec % 60
             ));
 
+            //平均速度の表示
             detailAverageSpeed.setText(String.format(
                     Locale.JAPAN,
                     "平均速度: %.1f km/h",
                     averageSpeed * 3.6
             ));
 
-            double maxGpsSpeed = 0.0;
-            double maxSectionSpeed = 0.0;
+            //詳細データの宣言
+            double maxGpsSpeed = 0.0;//最大GPS速度
+            double maxSectionSpeed = 0.0;//最大区間平均速度
 
-            double movingTime = 0.0;
-            double stopTime = 0.0;
-            double longestStopTime = 0.0;
-            double currentStopTime = 0.0;
-            int stopCount = 0;
-            boolean wasStopping = false;
+            double movingTime = 0.0;//移動時間
+            double stopTime = 0.0;//停止時間
+            double longestStopTime = 0.0;//最長停止時間
+            double currentStopTime = 0.0;//停止時間計算用
+            int stopCount = 0;//停止回数
+            boolean wasStopping = false;//止まっているかどうかを示すBoolean
 
-            double speed0to5Time = 0.0;
-            double speed5to10Time = 0.0;
-            double speed10to15Time = 0.0;
-            double speed15to20Time = 0.0;
-            double speed20OverTime = 0.0;
+            double speed0to5Time = 0.0;//0~5km/hの時間
+            double speed5to10Time = 0.0;//5~10km/h
+            double speed10to15Time = 0.0;//10~15km/h
+            double speed15to20Time = 0.0;//15~20km/h
+            double speed20OverTime = 0.0;//20km/h~
 
-            ArrayList<GeoPoint> geoPoints = new ArrayList<>();
+            ArrayList<GeoPoint> geoPoints = new ArrayList<>();//GeoPoint用の配列(後々線を引くために使用する)
 
             for (int i = 0; i < pointsArray.length(); i++) {
                 JSONObject now = pointsArray.getJSONObject(i);
 
                 double lat = now.getDouble("lat");
                 double lon = now.getDouble("lon");
-                geoPoints.add(new GeoPoint(lat, lon));
+                geoPoints.add(new GeoPoint(lat, lon));//GeoPointに変換
 
+                //GPS速度関連
                 double gpsSpeed = now.getDouble("speed");
                 if (gpsSpeed > maxGpsSpeed) {
                     maxGpsSpeed = gpsSpeed;
@@ -710,6 +723,7 @@ public class MainActivity extends AppCompatActivity {
                     continue;
                 }
 
+                //ひとつ前のデータを取得
                 JSONObject prev = pointsArray.getJSONObject(i - 1);
 
                 double prevDistance = prev.getDouble("distance");
@@ -718,17 +732,17 @@ public class MainActivity extends AppCompatActivity {
                 long prevTime = prev.getLong("time");
                 long nowTime = now.getLong("time");
 
-                double diffDistance = nowDistance - prevDistance;
-                double diffTime = (nowTime - prevTime) / 1000.0;
+                double diffDistance = nowDistance - prevDistance;//一個前からの移動距離
+                double diffTime = (nowTime - prevTime) / 1000.0;//一個前からどのぐらいの時間がたったか
 
                 if (diffTime <= 0) {
                     continue;
                 }
 
                 double sectionSpeed = diffDistance / diffTime; // m/s
-                double sectionSpeedKmh = sectionSpeed * 3.6;
+                double sectionSpeedKmh = sectionSpeed * 3.6;//時速に変換
 
-                if (sectionSpeed > maxSectionSpeed) {
+                if (sectionSpeed > maxSectionSpeed) {//最大速度を求める
                     maxSectionSpeed = sectionSpeed;
                 }
 
@@ -737,20 +751,22 @@ public class MainActivity extends AppCompatActivity {
                     stopTime += diffTime;
                     currentStopTime += diffTime;
 
-                    if (!wasStopping) {
-                        stopCount++;
-                        wasStopping = true;
+                    if (!wasStopping) {//止まったタイミングで
+                        stopCount++;//停止回数を＋１
+                        wasStopping = true;//停止中にする
                     }
 
+                    //最大停止時間の更新
                     if (currentStopTime > longestStopTime) {
                         longestStopTime = currentStopTime;
                     }
 
-                } else {
-                    movingTime += diffTime;
-                    currentStopTime = 0.0;
-                    wasStopping = false;
+                } else {//停止していないの時の処理
+                    movingTime += diffTime;//移動時間を加算
+                    currentStopTime = 0.0;//停止時間をゼロに
+                    wasStopping = false;//移動中に
 
+                    //各速度の時間を計算
                     if (sectionSpeedKmh < 5.0) {
                         speed0to5Time += diffTime;
                     } else if (sectionSpeedKmh < 10.0) {
@@ -765,11 +781,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
+            //平均速度
             double movingAverageSpeed = 0.0;
             if (movingTime > 0) {
                 movingAverageSpeed = totalDistance / movingTime; // m/s
             }
 
+            //移動停止の割合
             double movingRatio = 0.0;
             double stopRatio = 0.0;
             if (elapsedSec > 0) {
@@ -777,6 +795,7 @@ public class MainActivity extends AppCompatActivity {
                 stopRatio = stopTime / elapsedSec * 100.0;
             }
 
+            //移動時間
             double totalMovingTimeForSpeed = movingTime;
             if (totalMovingTimeForSpeed <= 0) {
                 totalMovingTimeForSpeed = 1.0;
@@ -869,14 +888,14 @@ public class MainActivity extends AppCompatActivity {
                     maxGpsSpeed * 3.6
             ));
 
-            historyRouteLine.setPoints(geoPoints);
+            historyRouteLine.setPoints(geoPoints);//点をマップに追加
 
             if (!geoPoints.isEmpty()) {
                 historyMap.getController().setZoom(18.0);
                 historyMap.getController().animateTo(geoPoints.get(0));
             }
 
-            historyMap.invalidate();
+            historyMap.invalidate();//表示
 
         } catch (Exception e) {
             e.printStackTrace();
