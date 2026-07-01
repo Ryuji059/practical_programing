@@ -198,6 +198,9 @@ public class MainActivity extends AppCompatActivity {
             // 保存予定の道路データとして保持
             roadSegments.add(editingRoad);
 
+            //データを保存
+            saveRoadSegmentsToJson();
+
             // 最後の点を保存
             lastRoadEndPoint = editingRoad.points.get(editingRoad.points.size() - 1);
 
@@ -295,6 +298,9 @@ public class MainActivity extends AppCompatActivity {
 
         mapEventsOverlay = new MapEventsOverlay(receiver);
         map.getOverlays().add(mapEventsOverlay);
+
+        // 保存済みの色分け道路を読み込む
+        loadRoadSegmentsFromJson();
 
         //記録開始、停止ボタン
         Button btnStart = findViewById(R.id.btnStart);
@@ -1033,6 +1039,111 @@ public class MainActivity extends AppCompatActivity {
             return Color.RED;
         } else {
             return Color.rgb(255, 140, 0); // 注意区間：オレンジ
+        }
+    }
+
+    //色分けデータの保存用関数
+    private void saveRoadSegmentsToJson() {
+        try {
+            JSONObject rootJson = new JSONObject();
+            JSONArray segmentsArray = new JSONArray();
+
+            for (RoadSegment segment : roadSegments) {
+                JSONObject segmentJson = new JSONObject();
+
+                segmentJson.put("type", segment.type.name());
+
+                JSONArray pointsArray = new JSONArray();
+
+                for (GeoPoint p : segment.points) {
+                    JSONObject pointJson = new JSONObject();
+                    pointJson.put("lat", p.getLatitude());
+                    pointJson.put("lon", p.getLongitude());
+                    pointsArray.put(pointJson);
+                }
+
+                segmentJson.put("points", pointsArray);
+                segmentsArray.put(segmentJson);
+            }
+
+            rootJson.put("segments", segmentsArray);
+
+            File file = new File(getFilesDir(), "roads.json");
+
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(rootJson.toString(4).getBytes(StandardCharsets.UTF_8));
+            fos.close();
+
+            Log.d("SAVE_ROADS", file.getAbsolutePath());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "色分け道路の保存に失敗しました", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    //色分け用データの読み込み関数
+    private void loadRoadSegmentsFromJson() {
+        try {
+            File file = new File(getFilesDir(), "roads.json");
+
+            if (!file.exists()) {
+                return;
+            }
+
+            String jsonText = readTextFile(file);
+            JSONObject rootJson = new JSONObject(jsonText);
+            JSONArray segmentsArray = rootJson.getJSONArray("segments");
+
+            // 既存の色分け線を一度消す
+            for (Polyline line : roadLines) {
+                map.getOverlays().remove(line);
+            }
+
+            roadLines.clear();
+            roadSegments.clear();
+
+            for (int i = 0; i < segmentsArray.length(); i++) {
+                JSONObject segmentJson = segmentsArray.getJSONObject(i);
+
+                String typeText = segmentJson.getString("type");
+                RoadType type = RoadType.valueOf(typeText);
+
+                RoadSegment segment = new RoadSegment(type);
+
+                JSONArray pointsArray = segmentJson.getJSONArray("points");
+
+                for (int j = 0; j < pointsArray.length(); j++) {
+                    JSONObject pointJson = pointsArray.getJSONObject(j);
+
+                    double lat = pointJson.getDouble("lat");
+                    double lon = pointJson.getDouble("lon");
+
+                    segment.points.add(new GeoPoint(lat, lon));
+                }
+
+                roadSegments.add(segment);
+
+                Polyline line = new Polyline();
+                line.setPoints(new ArrayList<>(segment.points));
+                line.setColor(getColorByRoadType(segment.type));
+                line.setWidth(10.0f);
+
+                map.getOverlays().add(line);
+                roadLines.add(line);
+            }
+
+            // タップ判定用Overlayを一番上に戻す
+            if (mapEventsOverlay != null) {
+                map.getOverlays().remove(mapEventsOverlay);
+                map.getOverlays().add(mapEventsOverlay);
+            }
+
+            map.invalidate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "色分け道路の読み込みに失敗しました", Toast.LENGTH_SHORT).show();
         }
     }
 }
