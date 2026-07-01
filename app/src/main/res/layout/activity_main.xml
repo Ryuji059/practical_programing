@@ -92,6 +92,21 @@
                     android:layout_marginTop="8dp">
 
                     <Button
+                        android:id="@+id/btnUndoRoadEdit"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Undo" />
+
+                    <Button
+                        android:id="@+id/btnClearRoadEdit"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="Clear" />
+
+                    <Button
                         android:id="@+id/btnSaveRoadEdit"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"

@@ -168,6 +168,8 @@ public class MainActivity extends AppCompatActivity {
         Button btnHistoryMode = findViewById(R.id.btnHistoryMode);
         Button btnRoadEditMode = findViewById(R.id.btnRoadEditMode);
         TextView btnBackMapFromHistory = findViewById(R.id.btnBackMapFromHistory);
+        Button btnUndoRoadEdit = findViewById(R.id.btnUndoRoadEdit);
+        Button btnClearRoadEdit = findViewById(R.id.btnClearRoadEdit);
         Button btnSaveRoadEdit = findViewById(R.id.btnSaveRoadEdit);
         Button btnFinishRoadEdit = findViewById(R.id.btnFinishRoadEdit);
         TextView btnBackHistory = findViewById(R.id.btnBackHistory);
@@ -176,6 +178,48 @@ public class MainActivity extends AppCompatActivity {
         btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
         btnRoadEditMode.setOnClickListener(v -> changeMode(AppMode.EDIT_ROAD));
         btnBackMapFromHistory.setOnClickListener(v -> changeMode(AppMode.MAP));
+
+        //色分けモードのボタン処理
+        btnUndoRoadEdit.setOnClickListener(v -> {
+            if (editingRoad == null || editingRoad.points.size() == 0) {
+                Toast.makeText(this, "取り消す点がありません", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 前の線から引き継いだ始点だけの場合は消さない
+            if (lastRoadEndPoint != null && editingRoad.points.size() == 1) {
+                Toast.makeText(this, "始点は取り消せません", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 最後の点を削除
+            editingRoad.points.remove(editingRoad.points.size() - 1);
+
+            // 仮線を更新
+            roadPreviewLine.setPoints(new ArrayList<>(editingRoad.points));
+            roadPreviewLine.setColor(getColorByRoadType(getSelectedRoadType()));
+
+            map.invalidate();
+
+            Toast.makeText(this, "最後の点を取り消しました", Toast.LENGTH_SHORT).show();
+        });
+        btnClearRoadEdit.setOnClickListener(v -> {
+            // 新しく編集中の線を作り直す
+            editingRoad = new RoadSegment(getSelectedRoadType());
+
+            // 前の線の終点から続ける仕様なので、始点だけ残す
+            if (lastRoadEndPoint != null) {
+                editingRoad.points.add(lastRoadEndPoint);
+            }
+
+            // 仮線を更新
+            roadPreviewLine.setPoints(new ArrayList<>(editingRoad.points));
+            roadPreviewLine.setColor(getColorByRoadType(editingRoad.type));
+
+            map.invalidate();
+
+            Toast.makeText(this, "編集中の線をクリアしました", Toast.LENGTH_SHORT).show();
+        });
         btnSaveRoadEdit.setOnClickListener(v -> {
             if (editingRoad == null || editingRoad.points.size() < 2) {
                 Toast.makeText(this, "2点以上選択してください", Toast.LENGTH_SHORT).show();
