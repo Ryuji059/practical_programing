@@ -334,8 +334,30 @@ public class MainActivity extends AppCompatActivity {
         radioRoadType = findViewById(R.id.radioRoadType);
         radioRoadType.check(R.id.radioSidewalk);
         radioRoadType.setOnCheckedChangeListener((group, checkedId) -> {
+            RoadType selectedType = getSelectedRoadType();
+
+            // すでに保存済みの線を選択している場合
+            if (selectedRoadIndex >= 0 && selectedRoadIndex < roadSegments.size()) {
+                RoadSegment selectedSegment = roadSegments.get(selectedRoadIndex);
+                selectedSegment.type = selectedType;
+
+                Polyline selectedLine = roadLines.get(selectedRoadIndex);
+                selectedLine.setColor(getColorByRoadType(selectedType));
+
+                // 選択中だと分かるように太さは太いままにする
+                selectedLine.setWidth(18.0f);
+
+                saveRoadSegmentsToJson();
+
+                map.invalidate();
+
+                Toast.makeText(this, "選択中の線の種類を変更しました", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 編集中の仮線がある場合
             if (editingRoad != null) {
-                editingRoad.type = getSelectedRoadType();
+                editingRoad.type = selectedType;
                 roadPreviewLine.setColor(getColorByRoadType(editingRoad.type));
                 map.invalidate();
             }
@@ -346,6 +368,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean singleTapConfirmedHelper(GeoPoint p) {
                 if (currentMode == AppMode.EDIT_ROAD) {
+                    clearSelectedRoadSegment();
+
                     RoadType selectedType = getSelectedRoadType();
 
                     if (editingRoad == null) {
@@ -376,7 +400,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     selectRoadSegment(index);
-                    Toast.makeText(MainActivity.this, "削除する線を選択しました", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, "線を選択しました", Toast.LENGTH_SHORT).show();
                     return true;
                 }
 
@@ -1241,10 +1265,20 @@ public class MainActivity extends AppCompatActivity {
 
         selectedRoadIndex = index;
 
+        RoadSegment selectedSegment = roadSegments.get(index);
         Polyline selectedLine = roadLines.get(index);
 
         // 選択中だと分かるように太くする
         selectedLine.setWidth(18.0f);
+
+        // ラジオボタンを選択中の線の種類に合わせる
+        if (selectedSegment.type == RoadType.SIDEWALK) {
+            radioRoadType.check(R.id.radioSidewalk);
+        } else if (selectedSegment.type == RoadType.ROADWAY) {
+            radioRoadType.check(R.id.radioRoadway);
+        } else if (selectedSegment.type == RoadType.CAUTION) {
+            radioRoadType.check(R.id.radioCaution);
+        }
 
         map.invalidate();
     }
