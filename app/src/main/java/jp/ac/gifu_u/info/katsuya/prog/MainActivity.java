@@ -37,6 +37,9 @@ import android.widget.TextView;
 import android.widget.LinearLayout;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
+import android.widget.RadioGroup;
+import org.osmdroid.events.MapEventsReceiver;
+import org.osmdroid.views.overlay.MapEventsOverlay;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -95,6 +98,15 @@ public class MainActivity extends AppCompatActivity {
     private TextView detailSpeed10to15;//10~15km/hの走行速度の割合
     private TextView detailSpeed15to20;//15~20km/hの走行速度の割合
     private TextView detailSpeed20Over;//20km/h~の走行速度の割合
+
+    //色分けモード用の変数
+    private RoadSegment editingRoad;
+    private ArrayList<RoadSegment> roadSegments = new ArrayList<>();
+    private Polyline roadPreviewLine;
+    private ArrayList<Polyline> roadLines = new ArrayList<>();
+    private RadioGroup radioRoadType;
+    private MapEventsOverlay mapEventsOverlay;//線上の点を選ぶための対策
+    private GeoPoint lastRoadEndPoint = null;//最後の記録地点
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -165,9 +177,56 @@ public class MainActivity extends AppCompatActivity {
         btnRoadEditMode.setOnClickListener(v -> changeMode(AppMode.EDIT_ROAD));
         btnBackMapFromHistory.setOnClickListener(v -> changeMode(AppMode.MAP));
         btnSaveRoadEdit.setOnClickListener(v -> {
-            // 色分けデータをJSONに保存
+            if (editingRoad == null || editingRoad.points.size() < 2) {
+                Toast.makeText(this, "2点以上選択してください", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // 現在選ばれている道路種類を反映
+            editingRoad.type = getSelectedRoadType();
+
+            // 確定用の線を新しく作る
+            Polyline fixedLine = new Polyline();
+            fixedLine.setPoints(new ArrayList<>(editingRoad.points));
+            fixedLine.setColor(getColorByRoadType(editingRoad.type));
+            fixedLine.setWidth(10.0f);
+
+            // 地図上に確定線として追加
+            map.getOverlays().add(fixedLine);
+            roadLines.add(fixedLine);
+
+            // 保存予定の道路データとして保持
+            roadSegments.add(editingRoad);
+
+            // 最後の点を保存
+            lastRoadEndPoint = editingRoad.points.get(editingRoad.points.size() - 1);
+
+            // タップ判定用Overlayを一番上に戻す
+            map.getOverlays().remove(mapEventsOverlay);
+            map.getOverlays().add(mapEventsOverlay);
+
+            // 次の線を引くために編集中データをリセット
+            editingRoad = new RoadSegment(getSelectedRoadType());
+
+            if (lastRoadEndPoint != null) {
+                editingRoad.points.add(lastRoadEndPoint);
+            }
+
+            // 仮線を空にする
+            roadPreviewLine.setPoints(new ArrayList<>());
+
+            map.invalidate();
+
+            Toast.makeText(this, "色分け線を追加しました", Toast.LENGTH_SHORT).show();
         });
-        btnFinishRoadEdit.setOnClickListener(v -> {changeMode(AppMode.MAP);});
+        btnFinishRoadEdit.setOnClickListener(v -> {
+            editingRoad = null;
+            roadPreviewLine.setPoints(new ArrayList<>());
+            map.invalidate();
+            lastRoadEndPoint = null;
+
+            changeMode(AppMode.MAP);
+        });
         btnBackHistory.setOnClickListener(v -> changeMode(AppMode.HISTORY));
 
 
@@ -188,6 +247,54 @@ public class MainActivity extends AppCompatActivity {
         routeLine.setColor(Color.BLUE);
         routeLine.setWidth(8.0f);
         map.getOverlays().add(routeLine);
+
+        // 色分け用の仮線
+        roadPreviewLine = new Polyline();
+        roadPreviewLine.setColor(Color.RED);
+        roadPreviewLine.setWidth(10.0f);
+        map.getOverlays().add(roadPreviewLine);
+
+        radioRoadType = findViewById(R.id.radioRoadType);
+        radioRoadType.check(R.id.radioSidewalk);
+        radioRoadType.setOnCheckedChangeListener((group, checkedId) -> {
+            if (editingRoad != null) {
+                editingRoad.type = getSelectedRoadType();
+                roadPreviewLine.setColor(getColorByRoadType(editingRoad.type));
+                map.invalidate();
+            }
+        });
+
+        //地図に線を書き入れるための処理
+        MapEventsReceiver receiver = new MapEventsReceiver() {
+            @Override
+            public boolean singleTapConfirmedHelper(GeoPoint p) {
+                if (currentMode == AppMode.EDIT_ROAD) {
+                    RoadType selectedType = getSelectedRoadType();
+
+                    if (editingRoad == null) {
+                        editingRoad = new RoadSegment(selectedType);
+                    }
+
+                    editingRoad.type = selectedType;
+                    editingRoad.points.add(p);
+
+                    roadPreviewLine.setPoints(editingRoad.points);
+                    roadPreviewLine.setColor(getColorByRoadType(editingRoad.type));
+
+                    map.invalidate();
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public boolean longPressHelper(GeoPoint p) {
+                return false;
+            }
+        };
+
+        mapEventsOverlay = new MapEventsOverlay(receiver);
+        map.getOverlays().add(mapEventsOverlay);
 
         //記録開始、停止ボタン
         Button btnStart = findViewById(R.id.btnStart);
@@ -905,5 +1012,27 @@ public class MainActivity extends AppCompatActivity {
 
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
+    }
+
+    private RoadType getSelectedRoadType() {
+        int checkedId = radioRoadType.getCheckedRadioButtonId();
+
+        if (checkedId == R.id.radioSidewalk) {
+            return RoadType.SIDEWALK;
+        } else if (checkedId == R.id.radioRoadway) {
+            return RoadType.ROADWAY;
+        } else {
+            return RoadType.CAUTION;
+        }
+    }
+
+    private int getColorByRoadType(RoadType type) {
+        if (type == RoadType.SIDEWALK) {
+            return Color.BLUE;
+        } else if (type == RoadType.ROADWAY) {
+            return Color.RED;
+        } else {
+            return Color.rgb(255, 140, 0); // 注意区間：オレンジ
+        }
     }
 }
