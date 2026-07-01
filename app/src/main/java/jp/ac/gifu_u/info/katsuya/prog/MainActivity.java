@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import android.widget.RadioGroup;
 import org.osmdroid.events.MapEventsReceiver;
 import org.osmdroid.views.overlay.MapEventsOverlay;
+import android.graphics.Point;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -107,6 +108,7 @@ public class MainActivity extends AppCompatActivity {
     private RadioGroup radioRoadType;
     private MapEventsOverlay mapEventsOverlay;//線上の点を選ぶための対策
     private GeoPoint lastRoadEndPoint = null;//最後の記録地点
+    private int selectedRoadIndex = -1;//選択中の線を管理するインデックス(-1は選択していない状態を表す)
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -170,6 +172,7 @@ public class MainActivity extends AppCompatActivity {
         TextView btnBackMapFromHistory = findViewById(R.id.btnBackMapFromHistory);
         Button btnUndoRoadEdit = findViewById(R.id.btnUndoRoadEdit);
         Button btnClearRoadEdit = findViewById(R.id.btnClearRoadEdit);
+        Button btnDeleteRoadEdit = findViewById(R.id.btnDeleteRoadEdit);
         Button btnSaveRoadEdit = findViewById(R.id.btnSaveRoadEdit);
         Button btnFinishRoadEdit = findViewById(R.id.btnFinishRoadEdit);
         TextView btnBackHistory = findViewById(R.id.btnBackHistory);
@@ -220,6 +223,30 @@ public class MainActivity extends AppCompatActivity {
 
             Toast.makeText(this, "編集中の線をクリアしました", Toast.LENGTH_SHORT).show();
         });
+        btnDeleteRoadEdit.setOnClickListener(v -> {
+            if (selectedRoadIndex < 0 || selectedRoadIndex >= roadSegments.size()) {
+                Toast.makeText(this, "削除する線を長押しで選択してください", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Polyline deleteLine = roadLines.get(selectedRoadIndex);
+
+            map.getOverlays().remove(deleteLine);
+            roadLines.remove(selectedRoadIndex);
+            roadSegments.remove(selectedRoadIndex);
+
+            selectedRoadIndex = -1;
+
+            saveRoadSegmentsToJson();
+
+            // タップ判定用Overlayを一番上に戻す
+            map.getOverlays().remove(mapEventsOverlay);
+            map.getOverlays().add(mapEventsOverlay);
+
+            map.invalidate();
+
+            Toast.makeText(this, "選択した線を削除しました", Toast.LENGTH_SHORT).show();
+        });
         btnSaveRoadEdit.setOnClickListener(v -> {
             if (editingRoad == null || editingRoad.points.size() < 2) {
                 Toast.makeText(this, "2点以上選択してください", Toast.LENGTH_SHORT).show();
@@ -264,6 +291,8 @@ public class MainActivity extends AppCompatActivity {
 
             map.invalidate();
 
+            clearSelectedRoadSegment();
+
             Toast.makeText(this, "色分け線を追加しました", Toast.LENGTH_SHORT).show();
         });
         btnFinishRoadEdit.setOnClickListener(v -> {
@@ -271,6 +300,7 @@ public class MainActivity extends AppCompatActivity {
             roadPreviewLine.setPoints(new ArrayList<>());
             map.invalidate();
             lastRoadEndPoint = null;
+            selectedRoadIndex = -1;
 
             changeMode(AppMode.MAP);
         });
@@ -336,6 +366,20 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean longPressHelper(GeoPoint p) {
+                if (currentMode == AppMode.EDIT_ROAD) {
+                    int index = findNearestRoadSegmentIndex(p);
+
+                    if (index == -1) {
+                        clearSelectedRoadSegment();
+                        Toast.makeText(MainActivity.this, "近くに線がありません", Toast.LENGTH_SHORT).show();
+                        return true;
+                    }
+
+                    selectRoadSegment(index);
+                    Toast.makeText(MainActivity.this, "削除する線を選択しました", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+
                 return false;
             }
         };
@@ -1189,5 +1233,113 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             Toast.makeText(this, "色分け道路の読み込みに失敗しました", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    //選択の関数
+    private void selectRoadSegment(int index) {
+        clearSelectedRoadSegment();
+
+        selectedRoadIndex = index;
+
+        Polyline selectedLine = roadLines.get(index);
+
+        // 選択中だと分かるように太くする
+        selectedLine.setWidth(18.0f);
+
+        map.invalidate();
+    }
+
+    //選択解除の関数
+    private void clearSelectedRoadSegment() {
+        if (selectedRoadIndex >= 0 && selectedRoadIndex < roadLines.size()) {
+            Polyline oldLine = roadLines.get(selectedRoadIndex);
+            oldLine.setWidth(10.0f);
+        }
+
+        selectedRoadIndex = -1;
+        map.invalidate();
+    }
+
+    //タップ位置に一番近い線を探す関数
+    private int findNearestRoadSegmentIndex(GeoPoint tapPoint) {
+        int nearestIndex = -1;
+        double nearestDistance = Double.MAX_VALUE;
+
+        Point tapScreenPoint = new Point();
+        map.getProjection().toPixels(tapPoint, tapScreenPoint);
+
+        for (int i = 0; i < roadSegments.size(); i++) {
+            RoadSegment segment = roadSegments.get(i);
+
+            if (segment.points.size() < 2) {
+                continue;
+            }
+
+            for (int j = 0; j < segment.points.size() - 1; j++) {
+                Point p1 = new Point();
+                Point p2 = new Point();
+
+                map.getProjection().toPixels(segment.points.get(j), p1);
+                map.getProjection().toPixels(segment.points.get(j + 1), p2);
+
+                double distance = distancePointToSegment(
+                        tapScreenPoint.x,
+                        tapScreenPoint.y,
+                        p1.x,
+                        p1.y,
+                        p2.x,
+                        p2.y
+                );
+
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestIndex = i;
+                }
+            }
+        }
+
+        // 画面上でこの距離以内なら選択できる
+        double threshold = 40.0;
+
+        if (nearestDistance <= threshold) {
+            return nearestIndex;
+        }
+
+        return -1;
+    }
+
+    //点と線分の距離を求める関数
+    private double distancePointToSegment(
+            double px,
+            double py,
+            double x1,
+            double y1,
+            double x2,
+            double y2
+    ) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+
+        if (dx == 0 && dy == 0) {
+            double diffX = px - x1;
+            double diffY = py - y1;
+            return Math.sqrt(diffX * diffX + diffY * diffY);
+        }
+
+        double t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+
+        if (t < 0) {
+            t = 0;
+        } else if (t > 1) {
+            t = 1;
+        }
+
+        double nearestX = x1 + t * dx;
+        double nearestY = y1 + t * dy;
+
+        double diffX = px - nearestX;
+        double diffY = py - nearestY;
+
+        return Math.sqrt(diffX * diffX + diffY * diffY);
     }
 }
