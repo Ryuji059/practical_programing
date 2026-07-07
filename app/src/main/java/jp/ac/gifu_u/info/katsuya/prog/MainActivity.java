@@ -109,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
     private MapEventsOverlay mapEventsOverlay;//線上の点を選ぶための対策
     private GeoPoint lastRoadEndPoint = null;//最後の記録地点
     private int selectedRoadIndex = -1;//選択中の線を管理するインデックス(-1は選択していない状態を表す)
+    private boolean isFollowingCurrentLocation = false;//trueの時は現在地を追従する
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -425,6 +426,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             isRecording = true;
+            isFollowingCurrentLocation = true;
             changeMode(AppMode.RECORDING);
 
             //初期化
@@ -460,6 +462,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             isRecording = false;
+            isFollowingCurrentLocation = false;
             endTime = System.currentTimeMillis();//終了時刻を記録
 
             saveRouteToJson();//JSONファイルに保存
@@ -549,6 +552,13 @@ public class MainActivity extends AppCompatActivity {
                         );
                         //増えた分を加算
                         totalDistance += result[0];
+
+                        //追跡中は移動距離が4mを超えたときに現在地を中心に移動
+                        if(isFollowingCurrentLocation){
+                            if(result[0] > 4.0){
+                                map.getController().animateTo(currentPoint);//現在地を画面の中心に移動
+                            }
+                        }
                     }
                     //RoutePointクラスに格納
                     RoutePoint routePoint = new RoutePoint(
