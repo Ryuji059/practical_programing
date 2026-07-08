@@ -1,5 +1,6 @@
 package jp.ac.gifu_u.info.katsuya.prog;
 
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -119,6 +120,11 @@ public class MainActivity extends AppCompatActivity {
     private JSONArray currentHistoryPointsArray = null;//現在表示中のJSONの点データ
     private ArrayList<GeoPoint> currentHistoryGeoPoints = new ArrayList<>();//現在表示中のルートの点
     private Button btnToggleSpeedColor;//色を付けるかどうかを切り替えるボタン
+    // GPSフィルター用
+    private static final float RECORDING_MAX_ACCURACY = 30.0f; // 記録中に許可する最大誤差[m]
+    private static final double MAX_REASONABLE_SPEED_KMH = 60.0; // 自転車として異常な速度[km/h]
+    private static final double STOP_JITTER_DISTANCE = 8.0; // 停止中ブレとみなす距離[m]
+    private static final float STOP_JITTER_SPEED = 0.8f; // 停止中ブレとみなすGPS速度[m/s]
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -435,33 +441,25 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "すでに記録中です", Toast.LENGTH_SHORT).show();
                 return;
             }
+
             isRecording = true;
             isFollowingCurrentLocation = true;
             changeMode(AppMode.RECORDING);
 
-            //初期化
-            routePoints.clear();
-            totalDistance = 0.0;//走行距離を0に
-            lastRoutePoint = null;//最新のポイントを消す
-            startTime = System.currentTimeMillis();//開始時刻の記録
-
+            // MainActivity側の表示用ルート線は一度消す
+            // Service側で記録するので、ここでは保存用データは初期化しない
             routeLine.setPoints(new ArrayList<>());
             map.invalidate();
-            //現在地の記録
-            if (currentPoint != null) {
-                RoutePoint firstPoint = new RoutePoint(
-                        currentPoint.getLatitude(),//緯度
-                        currentPoint.getLongitude(),//経度
-                        startTime,
-                        0.0f,
-                        0.0
-                );
 
-                routePoints.add(firstPoint);
-                lastRoutePoint = firstPoint;
-                updateRouteLine();//ルートラインの更新
+            Intent intent = new Intent(this, LocationTrackingService.class);
+            intent.setAction(LocationTrackingService.ACTION_START);
+
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
             }
-            //開始を通知
+
             Toast.makeText(this, "記録を開始しました", Toast.LENGTH_SHORT).show();
         });
 
@@ -471,14 +469,17 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "現在は記録中ではありません", Toast.LENGTH_SHORT).show();
                 return;
             }
+
             isRecording = false;
             isFollowingCurrentLocation = false;
-            endTime = System.currentTimeMillis();//終了時刻を記録
 
-            saveRouteToJson();//JSONファイルに保存
+            Intent intent = new Intent(this, LocationTrackingService.class);
+            intent.setAction(LocationTrackingService.ACTION_STOP);
+            startService(intent);
 
-            //終了を通知
             Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
+
+            changeMode(AppMode.MAP);
         });
 
         btnToggleSpeedColor.setOnClickListener(v -> {
@@ -524,12 +525,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startLocationUpdates() {
-        //権限確認
+        // 権限確認
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {//権限を与えられてなかった場合
-            //権限を要求する
+                != PackageManager.PERMISSION_GRANTED) {
+
             ActivityCompat.requestPermissions(
                     this,
                     new String[]{
@@ -544,105 +545,71 @@ public class MainActivity extends AppCompatActivity {
         LocationListener listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
-                //GPS優先処理
+                // MainActivity側は現在地表示だけを担当する
+
                 String provider = location.getProvider();
                 long now = System.currentTimeMillis();
 
-                // GPSが来た場合は、GPS取得時刻を更新
+                // GPSが来たら時刻を保存
                 if (LocationManager.GPS_PROVIDER.equals(provider)) {
                     lastGpsLocationTime = now;
                 }
 
-                // NETWORKから来た位置情報の場合
+                // GPSが最近来ているならNETWORKは無視
                 if (LocationManager.NETWORK_PROVIDER.equals(provider)) {
-                    // 直近10秒以内にGPSが来ているなら、NETWORKは使わない
                     if (now - lastGpsLocationTime < 10000) {
                         return;
                     }
 
-                    // NETWORKの精度が悪すぎる場合も使わない
-                    if (location.hasAccuracy() && location.getAccuracy() > 50) {
+                    // 現在地表示用なので少しゆるめ
+                    if (location.hasAccuracy() && location.getAccuracy() > 100) {
                         return;
                     }
                 }
 
-                // GPSでもNETWORKでも、精度が極端に悪い場合は無視
+                // 精度が極端に悪い位置は表示にも使わない
                 if (location.hasAccuracy() && location.getAccuracy() > 100) {
                     return;
                 }
 
-
-                //現在の緯度経度を取得
                 double lat = location.getLatitude();
                 double lon = location.getLongitude();
 
-                currentPoint = new GeoPoint(lat, lon);//現在地を更新
-                //記録中はroutePointsに現在地を記録
-                if (isRecording) {
-                    long time = System.currentTimeMillis();//記録時刻を記録
-                    float speed = location.hasSpeed() ? location.getSpeed() : 0.0f;//GPSから速度を取得
+                currentPoint = new GeoPoint(lat, lon);
 
-                    //走行距離の更新
-                    if (lastRoutePoint != null) {
-                        float[] result = new float[1];//答えを入れるための配列
-                        //直前の地点から今の地点の距離を計算
-                        Location.distanceBetween(
-                                lastRoutePoint.lat,
-                                lastRoutePoint.lon,
-                                lat,
-                                lon,
-                                result
-                        );
-                        //増えた分を加算
-                        totalDistance += result[0];
-
-                        //追跡中は移動距離が4mを超えたときに現在地を中心に移動
-                        if(isFollowingCurrentLocation){
-                            if(result[0] > 4.0){
-                                map.getController().animateTo(currentPoint);//現在地を画面の中心に移動
-                            }
-                        }
-                    }
-                    //RoutePointクラスに格納
-                    RoutePoint routePoint = new RoutePoint(
-                            lat,
-                            lon,
-                            time,
-                            speed,
-                            totalDistance
-                    );
-                    //配列に追加
-                    routePoints.add(routePoint);
-                    lastRoutePoint = routePoint;//lastRoutePointを更新
-
-                    updateRouteLine();//ルートラインを更新
+                // 記録中に現在地追従したい場合
+                if (isRecording && isFollowingCurrentLocation) {
+                    map.getController().animateTo(currentPoint);
                 }
 
                 // 現在地マーカーの位置を更新
-                if (currentMarker == null) {//ない場合は作成
+                if (currentMarker == null) {
                     currentMarker = new Marker(map);
                     currentMarker.setTitle("現在地");
                     map.getOverlays().add(currentMarker);
                 }
 
-                currentMarker.setPosition(currentPoint);//現在地にピンの位置を更新
-                currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);//マーカーを立てる
+                currentMarker.setPosition(currentPoint);
+                currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
                 map.invalidate();
 
-                Log.d("GPS_TEST", "lat=" + location.getLatitude()
-                        + ", lon=" + location.getLongitude()
-                        + ", provider=" + location.getProvider());
+                Log.d("GPS_DISPLAY",
+                        "provider=" + provider +
+                                ", lat=" + lat +
+                                ", lon=" + lon +
+                                ", accuracy=" + location.getAccuracy()
+                );
             }
         };
-        //3秒または5メートル進んだらGPS情報を取得
+
         locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 3000,
                 5,
                 listener
         );
-        //インターネットからも同様に取得
+
         locationManager.requestLocationUpdates(
                 LocationManager.NETWORK_PROVIDER,
                 3000,
@@ -1871,5 +1838,65 @@ public class MainActivity extends AppCompatActivity {
         }
 
         historyMap.invalidate();
+    }
+
+    //GPSフィルターをかける関数
+    private boolean shouldIgnoreLocationForRecording(Location location) {
+        // 記録中ではないなら、現在地表示には使いたいので無視しない
+        if (!isRecording) {
+            return false;
+        }
+
+        // 精度が悪すぎる点は無視
+        if (location.hasAccuracy() && location.getAccuracy() > RECORDING_MAX_ACCURACY) {
+            Log.d("GPS_FILTER", "精度が悪いため無視: accuracy=" + location.getAccuracy());
+            return true;
+        }
+
+        // 前回地点がない場合は比較できないので使う
+        if (lastRoutePoint == null) {
+            return false;
+        }
+
+        double lat = location.getLatitude();
+        double lon = location.getLongitude();
+
+        float[] result = new float[1];
+
+        Location.distanceBetween(
+                lastRoutePoint.lat,
+                lastRoutePoint.lon,
+                lat,
+                lon,
+                result
+        );
+
+        double distance = result[0];
+
+        double diffTime = (System.currentTimeMillis() - lastRoutePoint.time) / 1000.0;
+
+        if (diffTime <= 0) {
+            return true;
+        }
+
+        double sectionSpeedKmh = (distance / diffTime) * 3.6;
+
+        // 異常に速い移動はGPSの飛びとして無視
+        if (sectionSpeedKmh > MAX_REASONABLE_SPEED_KMH) {
+            Log.d("GPS_FILTER", "ワープ判定で無視: speed="
+                    + sectionSpeedKmh + " km/h, distance=" + distance);
+            return true;
+        }
+
+        float gpsSpeed = location.hasSpeed() ? location.getSpeed() : 0.0f;
+
+        // 停止中の小さいGPSブレを無視
+        if (gpsSpeed < STOP_JITTER_SPEED && distance < STOP_JITTER_DISTANCE) {
+            Log.d("GPS_FILTER", "停止中のブレとして無視: distance="
+                    + distance + ", gpsSpeed=" + gpsSpeed);
+            return true;
+        }
+
+        return false;
     }
 }
