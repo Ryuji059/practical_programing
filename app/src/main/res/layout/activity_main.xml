@@ -59,7 +59,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="道路種類を選択"
-                    android:textSize="16sp" />
+                    android:textSize="16sp"
+                    android:textColor="#000000"/>
 
                 <RadioGroup
                     android:id="@+id/radioRoadType"
@@ -70,19 +71,28 @@
                         android:id="@+id/radioSidewalk"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="歩道通行可" />
+                        android:text="歩道通行可"
+                        android:textSize="16sp"
+                        android:textColor="#000000"
+                        android:buttonTint="#000000"/>
 
                     <RadioButton
                         android:id="@+id/radioRoadway"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="車道推奨" />
+                        android:text="車道推奨"
+                        android:textSize="16sp"
+                        android:textColor="#000000"
+                        android:buttonTint="#000000"/>
 
                     <RadioButton
                         android:id="@+id/radioCaution"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="注意区間" />
+                        android:text="注意区間"
+                        android:textSize="16sp"
+                        android:textColor="#000000"
+                        android:buttonTint="#000000"/>
                 </RadioGroup>
 
                 <LinearLayout

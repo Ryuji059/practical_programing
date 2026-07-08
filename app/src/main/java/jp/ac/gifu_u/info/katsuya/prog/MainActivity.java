@@ -40,6 +40,9 @@ import androidx.appcompat.app.AlertDialog;
 import android.widget.EditText;
 import android.widget.PopupMenu;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -119,6 +122,20 @@ public class MainActivity extends AppCompatActivity {
         Configuration.getInstance().setUserAgentValue(getPackageName());//OpenStreetMapのサーバーへ「このアプリがアクセスしています」と名乗る
         //レイアウト読み込み
         setContentView(R.layout.activity_main);
+        View rootLayout = findViewById(R.id.rootLayout);
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+
+            v.setPadding(
+                    0,
+                    systemBars.top,
+                    0,
+                    0
+            );
+
+            return insets;
+        });
 
         map = findViewById(R.id.map);//MapViewの取得
         map.setTileSource(TileSourceFactory.MAPNIK);//地図の種類を設定(今回はOpenStreetMap標準地図)
