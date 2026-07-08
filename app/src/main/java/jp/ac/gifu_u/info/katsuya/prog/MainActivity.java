@@ -110,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
     private int selectedRoadIndex = -1;//選択中の線を管理するインデックス(-1は選択していない状態を表す)
     private boolean isFollowingCurrentLocation = false;//trueの時は現在地を追従する
     private View selectedRoadPanel;//色分けモード中道路を選択しているときのビュー
+    private ArrayList<Polyline> historySpeedLines = new ArrayList<>();//履歴走行ルートの速度による色分け表示
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -1176,6 +1177,17 @@ public class MainActivity extends AppCompatActivity {
                 historyMap.getController().animateTo(geoPoints.get(0));
             }
 
+            // 通常の青い1本線は消す
+            historyRouteLine.setPoints(new ArrayList<>());
+
+            // 速度に応じた色分け線を表示
+            drawSpeedColoredHistoryRoute(pointsArray);
+
+            if (!geoPoints.isEmpty()) {
+                historyMap.getController().setZoom(18.0);
+                historyMap.getController().animateTo(geoPoints.get(0));
+            }
+
             historyMap.invalidate();//表示
 
         } catch (Exception e) {
@@ -1629,6 +1641,137 @@ public class MainActivity extends AppCompatActivity {
             loadHistoryList(); // 一覧を更新
         } else {
             Toast.makeText(this, "削除に失敗しました", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    //履歴速度線を消す関数(履歴表示時にのこらにようにするため)
+    private void clearHistorySpeedLines() {
+        for (Polyline line : historySpeedLines) {
+            historyMap.getOverlays().remove(line);
+        }
+
+        historySpeedLines.clear();
+    }
+
+    //速度から色を作る関数
+    private int getSpeedGradientColor(double speedKmh) {
+        if (speedKmh < 0) {//速度の下限
+            speedKmh = 0;
+        }
+
+        if (speedKmh > 30) {//速度の上限
+            speedKmh = 30;
+        }
+
+        int color0  = Color.rgb(255, 0, 0);     // 0km/h 赤
+        int color5  = Color.rgb(255, 80, 0);    // 5km/h 赤橙
+        int color10 = Color.rgb(255, 140, 0);   // 10km/h オレンジ
+        int color15 = Color.rgb(255, 220, 0);   // 15km/h 黄色
+        int color20 = Color.rgb(180, 255, 0);   // 20km/h 黄緑
+        int color25 = Color.rgb(60, 220, 60);   // 25km/h 緑
+        int color30 = Color.rgb(0, 160, 0);     // 30km/h 濃い緑
+
+        if (speedKmh <= 5) {
+            double ratio = speedKmh / 5.0;
+            return interpolateColor(color0, color5, ratio);
+        } else if (speedKmh <= 10) {
+            double ratio = (speedKmh - 5.0) / 5.0;
+            return interpolateColor(color5, color10, ratio);
+        } else if (speedKmh <= 15) {
+            double ratio = (speedKmh - 10.0) / 5.0;
+            return interpolateColor(color10, color15, ratio);
+        } else if (speedKmh <= 20) {
+            double ratio = (speedKmh - 15.0) / 5.0;
+            return interpolateColor(color15, color20, ratio);
+        } else if (speedKmh <= 25) {
+            double ratio = (speedKmh - 20.0) / 5.0;
+            return interpolateColor(color20, color25, ratio);
+        } else {
+            double ratio = (speedKmh - 25.0) / 5.0;
+            return interpolateColor(color25, color30, ratio);
+        }
+    }
+
+    //色を混ぜる関数
+    private int interpolateColor(int startColor, int endColor, double ratio) {
+        if (ratio < 0) {
+            ratio = 0;
+        }
+
+        if (ratio > 1) {
+            ratio = 1;
+        }
+
+        int startR = Color.red(startColor);
+        int startG = Color.green(startColor);
+        int startB = Color.blue(startColor);
+
+        int endR = Color.red(endColor);
+        int endG = Color.green(endColor);
+        int endB = Color.blue(endColor);
+
+        int r = (int) (startR + (endR - startR) * ratio);
+        int g = (int) (startG + (endG - startG) * ratio);
+        int b = (int) (startB + (endB - startB) * ratio);
+
+        return Color.rgb(r, g, b);
+    }
+
+    //履歴ルートを速度色分けで描画する関数
+    private void drawSpeedColoredHistoryRoute(JSONArray pointsArray) {
+        try {
+            clearHistorySpeedLines();
+
+            if (pointsArray.length() < 2) {
+                return;
+            }
+
+            for (int i = 1; i < pointsArray.length(); i++) {
+                JSONObject prev = pointsArray.getJSONObject(i - 1);
+                JSONObject now = pointsArray.getJSONObject(i);
+
+                double prevLat = prev.getDouble("lat");
+                double prevLon = prev.getDouble("lon");
+                double nowLat = now.getDouble("lat");
+                double nowLon = now.getDouble("lon");
+
+                double prevDistance = prev.getDouble("distance");
+                double nowDistance = now.getDouble("distance");
+
+                long prevTime = prev.getLong("time");
+                long nowTime = now.getLong("time");
+
+                double diffDistance = nowDistance - prevDistance;
+                double diffTime = (nowTime - prevTime) / 1000.0;
+
+                if (diffTime <= 0) {
+                    continue;
+                }
+
+                double speedMps = diffDistance / diffTime;
+                double speedKmh = speedMps * 3.6;
+
+                int color = getSpeedGradientColor(speedKmh);
+
+                Polyline sectionLine = new Polyline();
+
+                ArrayList<GeoPoint> sectionPoints = new ArrayList<>();
+                sectionPoints.add(new GeoPoint(prevLat, prevLon));
+                sectionPoints.add(new GeoPoint(nowLat, nowLon));
+
+                sectionLine.setPoints(sectionPoints);
+                sectionLine.setColor(color);
+                sectionLine.setWidth(10.0f);
+
+                historyMap.getOverlays().add(sectionLine);
+                historySpeedLines.add(sectionLine);
+            }
+
+            historyMap.invalidate();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "速度色分け表示に失敗しました", Toast.LENGTH_SHORT).show();
         }
     }
 }
