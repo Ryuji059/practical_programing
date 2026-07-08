@@ -797,47 +797,66 @@ public class MainActivity extends AppCompatActivity {
                         min,
                         remainSec
                 );
-                //ボタンを作成(タイトル、走行距離、走行時間を表示)押されるとその履歴のルート等を見れるようになります
                 // 履歴1件分の横並びレイアウトを作成
                 LinearLayout rowLayout = new LinearLayout(this);
                 rowLayout.setOrientation(LinearLayout.HORIZONTAL);
-                rowLayout.setPadding(0, 8, 0, 8);
 
-                // 左側：履歴表示ボタン
-                Button historyButton = new Button(this);
-                historyButton.setText(
+                // 行同士の間隔
+                LinearLayout.LayoutParams rowParams =
+                        new LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                dpInt(64)
+                        );
+                rowParams.setMargins(0, dpInt(8), 0, 0);
+                rowLayout.setLayoutParams(rowParams);
+
+                // 左側：履歴表示部分
+                TextView historyView = new TextView(this);
+                historyView.setText(
                         dateText + "\n" +
                                 distanceText + "\n" +
                                 timeText
                 );
+                historyView.setTextSize(14);
+                historyView.setGravity(android.view.Gravity.CENTER);
+                historyView.setTextColor(Color.BLACK);
+                historyView.setBackgroundColor(Color.rgb(220, 220, 220));
+                historyView.setPadding(0, 0, 0, 0);
+                historyView.setIncludeFontPadding(false);
 
-                // 履歴ボタンを横幅いっぱいに広げる
-                LinearLayout.LayoutParams historyButtonParams =
+                // 履歴欄を横幅いっぱいに広げる
+                LinearLayout.LayoutParams historyParams =
                         new LinearLayout.LayoutParams(
                                 0,
-                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                LinearLayout.LayoutParams.MATCH_PARENT,
                                 1.0f
                         );
-                historyButton.setLayoutParams(historyButtonParams);
+                historyView.setLayoutParams(historyParams);
 
-                // 履歴ボタンを押したら詳細画面へ
-                historyButton.setOnClickListener(v -> {
+                // 履歴欄を押したら詳細画面へ
+                historyView.setOnClickListener(v -> {
                     loadRouteOnHistoryMap(file);
                     changeMode(AppMode.HISTORY_DETAIL);
                 });
 
                 // 右側：︙メニューボタン
-                Button menuButton = new Button(this);
+                TextView menuButton = new TextView(this);
                 menuButton.setText("︙");
-                menuButton.setTextSize(22);
+                menuButton.setTextSize(28);
+                menuButton.setGravity(android.view.Gravity.CENTER);
+                menuButton.setTextColor(Color.BLACK);
+                menuButton.setBackgroundColor(Color.rgb(220, 220, 220));
+                menuButton.setPadding(0, 0, 0, 0);
+                menuButton.setIncludeFontPadding(false);
 
-                // ︙ボタンの幅
-                LinearLayout.LayoutParams menuButtonParams =
+                // ︙ボタンの幅と高さ
+                LinearLayout.LayoutParams menuParams =
                         new LinearLayout.LayoutParams(
-                                80,
+                                dpInt(48),
                                 LinearLayout.LayoutParams.MATCH_PARENT
                         );
-                menuButton.setLayoutParams(menuButtonParams);
+                menuParams.setMargins(dpInt(8), 0, 0, 0);
+                menuButton.setLayoutParams(menuParams);
 
                 // ︙を押したらメニュー表示
                 menuButton.setOnClickListener(v -> {
@@ -845,7 +864,7 @@ public class MainActivity extends AppCompatActivity {
                 });
 
                 // 横並びに追加
-                rowLayout.addView(historyButton);
+                rowLayout.addView(historyView);
                 rowLayout.addView(menuButton);
 
                 // 履歴一覧に追加
@@ -1164,6 +1183,10 @@ public class MainActivity extends AppCompatActivity {
 
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
+    }
+
+    private int dpInt(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density);
     }
 
     private RoadType getSelectedRoadType() {
