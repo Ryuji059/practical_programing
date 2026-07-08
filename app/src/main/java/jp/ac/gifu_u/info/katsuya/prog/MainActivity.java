@@ -459,7 +459,7 @@ public class MainActivity extends AppCompatActivity {
         //走行履歴の詳細データの表示用パネルの設定
         routeDetailPanel.setOnClickListener(v -> {
             if (detailPanelOpen) {//詳細欄を触ったら、下から上に上がってくるモーションをする。
-                routeDetailPanel.animate().translationY(dp(240)).setDuration(250).start();
+                routeDetailPanel.animate().translationY(dp(390)).setDuration(250).start();
                 detailPanelOpen = false;
             } else {//閉じるときのアニメーションを追加
                 routeDetailPanel.animate().translationY(0f).setDuration(250).start();
@@ -716,6 +716,9 @@ public class MainActivity extends AppCompatActivity {
         if (mode == AppMode.HISTORY_DETAIL) {//走行ルートの場合
             historyDetailLayout.setVisibility(View.VISIBLE);//ルート表示用のレイアウトを表示
             isRecording = false;//記録中なら記録を終了する
+            //詳細パネルを閉じた状態に
+            routeDetailPanel.setTranslationY(dp(390));
+            detailPanelOpen = false;
             return;
         }
 
