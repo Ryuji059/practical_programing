@@ -114,6 +114,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isFollowingCurrentLocation = false;//trueの時は現在地を追従する
     private View selectedRoadPanel;//色分けモード中道路を選択しているときのビュー
     private ArrayList<Polyline> historySpeedLines = new ArrayList<>();//履歴走行ルートの速度による色分け表示
+    private long lastGpsLocationTime = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -532,6 +533,34 @@ public class MainActivity extends AppCompatActivity {
         LocationListener listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
+                //GPS優先処理
+                String provider = location.getProvider();
+                long now = System.currentTimeMillis();
+
+                // GPSが来た場合は、GPS取得時刻を更新
+                if (LocationManager.GPS_PROVIDER.equals(provider)) {
+                    lastGpsLocationTime = now;
+                }
+
+                // NETWORKから来た位置情報の場合
+                if (LocationManager.NETWORK_PROVIDER.equals(provider)) {
+                    // 直近10秒以内にGPSが来ているなら、NETWORKは使わない
+                    if (now - lastGpsLocationTime < 10000) {
+                        return;
+                    }
+
+                    // NETWORKの精度が悪すぎる場合も使わない
+                    if (location.hasAccuracy() && location.getAccuracy() > 50) {
+                        return;
+                    }
+                }
+
+                // GPSでもNETWORKでも、精度が極端に悪い場合は無視
+                if (location.hasAccuracy() && location.getAccuracy() > 100) {
+                    return;
+                }
+
+
                 //現在の緯度経度を取得
                 double lat = location.getLatitude();
                 double lon = location.getLongitude();
@@ -589,11 +618,22 @@ public class MainActivity extends AppCompatActivity {
                 currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);//マーカーを立てる
 
                 map.invalidate();
+
+                Log.d("GPS_TEST", "lat=" + location.getLatitude()
+                        + ", lon=" + location.getLongitude()
+                        + ", provider=" + location.getProvider());
             }
         };
         //3秒または5メートル進んだらGPS情報を取得
         locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
+                3000,
+                5,
+                listener
+        );
+        //インターネットからも同様に取得
+        locationManager.requestLocationUpdates(
+                LocationManager.NETWORK_PROVIDER,
                 3000,
                 5,
                 listener
