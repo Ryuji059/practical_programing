@@ -114,7 +114,11 @@ public class MainActivity extends AppCompatActivity {
     private boolean isFollowingCurrentLocation = false;//trueの時は現在地を追従する
     private View selectedRoadPanel;//色分けモード中道路を選択しているときのビュー
     private ArrayList<Polyline> historySpeedLines = new ArrayList<>();//履歴走行ルートの速度による色分け表示
-    private long lastGpsLocationTime = 0;
+    private long lastGpsLocationTime = 0;//GPS取得時の時間
+    private boolean isSpeedColorMode = true;//速度によって色を付けるかどうか
+    private JSONArray currentHistoryPointsArray = null;//現在表示中のJSONの点データ
+    private ArrayList<GeoPoint> currentHistoryGeoPoints = new ArrayList<>();//現在表示中のルートの点
+    private Button btnToggleSpeedColor;//色を付けるかどうかを切り替えるボタン
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -125,6 +129,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         View rootLayout = findViewById(R.id.rootLayout);
 
+        //画面を少し下にずらす
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
 
@@ -199,6 +204,7 @@ public class MainActivity extends AppCompatActivity {
         selectedRoadPanel = findViewById(R.id.selectedRoadPanel);
         Button btnEditRoadMemo = findViewById(R.id.btnEditRoadMemo);
         Button btnCancelRoadSelection = findViewById(R.id.btnCancelRoadSelection);
+        btnToggleSpeedColor = findViewById(R.id.btnToggleSpeedColor);
 
         //各種ボタンの機能実装
         btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
@@ -473,6 +479,11 @@ public class MainActivity extends AppCompatActivity {
 
             //終了を通知
             Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
+        });
+
+        btnToggleSpeedColor.setOnClickListener(v -> {
+            isSpeedColorMode = !isSpeedColorMode;
+            updateHistoryRouteDisplay();
         });
 
         //走行履歴の詳細データの表示用パネルの設定
@@ -1227,25 +1238,19 @@ public class MainActivity extends AppCompatActivity {
                     maxGpsSpeed * 3.6
             ));
 
-            historyRouteLine.setPoints(geoPoints);//点をマップに追加
+            // 現在表示中の履歴データとして保存
+            currentHistoryPointsArray = pointsArray;
+            currentHistoryGeoPoints = new ArrayList<>(geoPoints);
+
+            // 速度色分けON/OFFに応じて表示
+            updateHistoryRouteDisplay();
 
             if (!geoPoints.isEmpty()) {
                 historyMap.getController().setZoom(18.0);
                 historyMap.getController().animateTo(geoPoints.get(0));
             }
 
-            // 通常の青い1本線は消す
-            historyRouteLine.setPoints(new ArrayList<>());
-
-            // 速度に応じた色分け線を表示
-            drawSpeedColoredHistoryRoute(pointsArray);
-
-            if (!geoPoints.isEmpty()) {
-                historyMap.getController().setZoom(18.0);
-                historyMap.getController().animateTo(geoPoints.get(0));
-            }
-
-            historyMap.invalidate();//表示
+            historyMap.invalidate();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -1830,5 +1835,41 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
             Toast.makeText(this, "速度色分け表示に失敗しました", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    //速度色分け表示切り替え用の関数
+    private void updateHistoryRouteDisplay() {
+        if (currentHistoryPointsArray == null || currentHistoryGeoPoints == null) {
+            return;
+        }
+
+        // 速度色分け線を一度消す
+        clearHistorySpeedLines();
+
+        if (isSpeedColorMode) {
+            // 青い通常線を消す
+            historyRouteLine.setPoints(new ArrayList<>());
+
+            // 速度色分け線を表示
+            drawSpeedColoredHistoryRoute(currentHistoryPointsArray);
+
+            if (btnToggleSpeedColor != null) {
+                btnToggleSpeedColor.setText("速度色 ON");
+            }
+        } else {
+            // 速度色分け線を消す
+            clearHistorySpeedLines();
+
+            // 青い通常線を表示
+            historyRouteLine.setPoints(new ArrayList<>(currentHistoryGeoPoints));
+            historyRouteLine.setColor(Color.BLUE);
+            historyRouteLine.setWidth(8.0f);
+
+            if (btnToggleSpeedColor != null) {
+                btnToggleSpeedColor.setText("速度色 OFF");
+            }
+        }
+
+        historyMap.invalidate();
     }
 }
