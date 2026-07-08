@@ -86,6 +86,41 @@
                 </RadioGroup>
 
                 <LinearLayout
+                    android:id="@+id/selectedRoadPanel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp"
+                    android:padding="8dp"
+                    android:background="#EEEEEE"
+                    android:visibility="gone">
+
+                    <Button
+                        android:id="@+id/btnEditRoadMemo"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="コメント編集" />
+
+                    <Button
+                        android:id="@+id/btnDeleteRoadEdit"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="削除" />
+
+                    <Button
+                        android:id="@+id/btnCancelRoadSelection"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="選択解除" />
+
+                </LinearLayout>
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
@@ -113,13 +148,6 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:layout_marginTop="8dp">
-
-                    <Button
-                        android:id="@+id/btnDeleteRoadEdit"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="削除" />
 
                     <Button
                         android:id="@+id/btnSaveRoadEdit"

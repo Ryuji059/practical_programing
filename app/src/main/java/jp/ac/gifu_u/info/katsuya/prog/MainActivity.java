@@ -41,6 +41,8 @@ import android.widget.RadioGroup;
 import org.osmdroid.events.MapEventsReceiver;
 import org.osmdroid.views.overlay.MapEventsOverlay;
 import android.graphics.Point;
+import androidx.appcompat.app.AlertDialog;
+import android.widget.EditText;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -110,6 +112,7 @@ public class MainActivity extends AppCompatActivity {
     private GeoPoint lastRoadEndPoint = null;//最後の記録地点
     private int selectedRoadIndex = -1;//選択中の線を管理するインデックス(-1は選択していない状態を表す)
     private boolean isFollowingCurrentLocation = false;//trueの時は現在地を追従する
+    private View selectedRoadPanel;//色分けモード中道路を選択しているときのビュー
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
         historyMap.setTileSource(TileSourceFactory.MAPNIK);//地図のタイプを設定
         historyMap.setMultiTouchControls(true);//日本指で操作可能に
 
-        historyRouteLine = new Polyline();
+        historyRouteLine = new Polyline();//走行履歴のルート表示
         historyRouteLine.setColor(Color.BLUE);//走行履歴のルート表示を青色に
         historyRouteLine.setWidth(8.0f);//フォントサイズの設定
         historyMap.getOverlays().add(historyRouteLine);//地図の上に線を表示できるようにする
@@ -177,6 +180,9 @@ public class MainActivity extends AppCompatActivity {
         Button btnSaveRoadEdit = findViewById(R.id.btnSaveRoadEdit);
         Button btnFinishRoadEdit = findViewById(R.id.btnFinishRoadEdit);
         TextView btnBackHistory = findViewById(R.id.btnBackHistory);
+        selectedRoadPanel = findViewById(R.id.selectedRoadPanel);
+        Button btnEditRoadMemo = findViewById(R.id.btnEditRoadMemo);
+        Button btnCancelRoadSelection = findViewById(R.id.btnCancelRoadSelection);
 
         //各種ボタンの機能実装
         btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
@@ -237,6 +243,7 @@ public class MainActivity extends AppCompatActivity {
             roadSegments.remove(selectedRoadIndex);
 
             selectedRoadIndex = -1;
+            selectedRoadPanel.setVisibility(View.GONE);
 
             saveRoadSegmentsToJson();
 
@@ -254,47 +261,18 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            // 現在選ばれている道路種類を反映
-            editingRoad.type = getSelectedRoadType();
-
-            // 確定用の線を新しく作る
-            Polyline fixedLine = new Polyline();
-            fixedLine.setPoints(new ArrayList<>(editingRoad.points));
-            fixedLine.setColor(getColorByRoadType(editingRoad.type));
-            fixedLine.setWidth(10.0f);
-
-            // 地図上に確定線として追加
-            map.getOverlays().add(fixedLine);
-            roadLines.add(fixedLine);
-
-            // 保存予定の道路データとして保持
-            roadSegments.add(editingRoad);
-
-            //データを保存
-            saveRoadSegmentsToJson();
-
-            // 最後の点を保存
-            lastRoadEndPoint = editingRoad.points.get(editingRoad.points.size() - 1);
-
-            // タップ判定用Overlayを一番上に戻す
-            map.getOverlays().remove(mapEventsOverlay);
-            map.getOverlays().add(mapEventsOverlay);
-
-            // 次の線を引くために編集中データをリセット
-            editingRoad = new RoadSegment(getSelectedRoadType());
-
-            if (lastRoadEndPoint != null) {
-                editingRoad.points.add(lastRoadEndPoint);
+            showMemoInputDialogForEditingRoad();
+        });
+        btnEditRoadMemo.setOnClickListener(v -> {
+            if (selectedRoadIndex < 0 || selectedRoadIndex >= roadSegments.size()) {
+                Toast.makeText(this, "編集する線を選択してください", Toast.LENGTH_SHORT).show();
+                return;
             }
 
-            // 仮線を空にする
-            roadPreviewLine.setPoints(new ArrayList<>());
-
-            map.invalidate();
-
+            showMemoEditDialogForSelectedRoad();
+        });
+        btnCancelRoadSelection.setOnClickListener(v -> {
             clearSelectedRoadSegment();
-
-            Toast.makeText(this, "色分け線を追加しました", Toast.LENGTH_SHORT).show();
         });
         btnFinishRoadEdit.setOnClickListener(v -> {
             editingRoad = null;
@@ -386,6 +364,16 @@ public class MainActivity extends AppCompatActivity {
                     map.invalidate();
                     return true;
                 }
+
+                if (currentMode == AppMode.MAP) {
+                    int index = findNearestRoadSegmentIndex(p);
+
+                    if (index != -1) {
+                        showRoadSegmentMemoDialog(index);
+                        return true;
+                    }
+                }
+
                 return false;
             }
 
@@ -1174,6 +1162,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject segmentJson = new JSONObject();
 
                 segmentJson.put("type", segment.type.name());
+                segmentJson.put("memo", segment.memo);
 
                 JSONArray pointsArray = new JSONArray();
 
@@ -1232,6 +1221,7 @@ public class MainActivity extends AppCompatActivity {
                 RoadType type = RoadType.valueOf(typeText);
 
                 RoadSegment segment = new RoadSegment(type);
+                segment.memo = segmentJson.optString("memo", "");
 
                 JSONArray pointsArray = segmentJson.getJSONArray("points");
 
@@ -1290,17 +1280,26 @@ public class MainActivity extends AppCompatActivity {
             radioRoadType.check(R.id.radioCaution);
         }
 
+        // 選択中パネルを表示
+        selectedRoadPanel.setVisibility(View.VISIBLE);
+
         map.invalidate();
     }
 
     //選択解除の関数
     private void clearSelectedRoadSegment() {
+        //線の太さを元に戻す
         if (selectedRoadIndex >= 0 && selectedRoadIndex < roadLines.size()) {
             Polyline oldLine = roadLines.get(selectedRoadIndex);
             oldLine.setWidth(10.0f);
         }
-
+        //インデックスを-1(何も選択していない状態)に
         selectedRoadIndex = -1;
+        //選択中の専用パネルを非表示に
+        if (selectedRoadPanel != null) {
+            selectedRoadPanel.setVisibility(View.GONE);
+        }
+
         map.invalidate();
     }
 
@@ -1385,5 +1384,137 @@ public class MainActivity extends AppCompatActivity {
         double diffY = py - nearestY;
 
         return Math.sqrt(diffX * diffX + diffY * diffY);
+    }
+
+    //コメントを追加する関数
+    private void showMemoInputDialogForEditingRoad() {
+        EditText editText = new EditText(this);
+        editText.setHint("例：道が狭い、車が多い、夜暗い など");
+        editText.setMinLines(3);
+        editText.setSingleLine(false);
+
+        if (editingRoad != null && editingRoad.memo != null) {
+            editText.setText(editingRoad.memo);
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("コメントを入力")
+                .setMessage("この色分け線にコメントを残せます。")
+                .setView(editText)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    editingRoad.memo = editText.getText().toString();
+                    confirmRoadEdit();
+                })
+                .setNeutralButton("コメントなしで保存", (dialog, which) -> {
+                    editingRoad.memo = "";
+                    confirmRoadEdit();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
+    }
+
+    //色分けの保存処理関数
+    private void confirmRoadEdit() {
+        if (editingRoad == null || editingRoad.points.size() < 2) {
+            Toast.makeText(this, "2点以上選択してください", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        editingRoad.type = getSelectedRoadType();
+
+        Polyline fixedLine = new Polyline();
+        fixedLine.setPoints(new ArrayList<>(editingRoad.points));
+        fixedLine.setColor(getColorByRoadType(editingRoad.type));
+        fixedLine.setWidth(10.0f);
+
+        map.getOverlays().add(fixedLine);
+        roadLines.add(fixedLine);
+
+        roadSegments.add(editingRoad);
+
+        saveRoadSegmentsToJson();
+
+        lastRoadEndPoint = editingRoad.points.get(editingRoad.points.size() - 1);
+
+        map.getOverlays().remove(mapEventsOverlay);
+        map.getOverlays().add(mapEventsOverlay);
+
+        editingRoad = new RoadSegment(getSelectedRoadType());
+
+        if (lastRoadEndPoint != null) {
+            editingRoad.points.add(lastRoadEndPoint);
+        }
+
+        roadPreviewLine.setPoints(new ArrayList<>());
+
+        clearSelectedRoadSegment();
+
+        map.invalidate();
+
+        Toast.makeText(this, "色分け線を保存しました", Toast.LENGTH_SHORT).show();
+    }
+
+    //地図モード時色分けされた線を触るとコメントを表示する処理
+    private void showRoadSegmentMemoDialog(int index) {
+        if (index < 0 || index >= roadSegments.size()) {
+            return;
+        }
+
+        RoadSegment segment = roadSegments.get(index);
+
+        String typeText = getRoadTypeText(segment.type);
+
+        String memoText = segment.memo;
+
+        if (memoText == null || memoText.trim().isEmpty()) {
+            memoText = "コメントはありません";
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle(typeText)
+                .setMessage(memoText)
+                .setPositiveButton("OK", null)
+                .show();
+    }
+
+    //道路区分名を日本語で表示する関数
+    private String getRoadTypeText(RoadType type) {
+        if (type == RoadType.SIDEWALK) {
+            return "歩道通行可";
+        } else if (type == RoadType.ROADWAY) {
+            return "車道推奨";
+        } else {
+            return "注意区間";
+        }
+    }
+
+    //メモ編集用関数
+    private void showMemoEditDialogForSelectedRoad() {
+        if (selectedRoadIndex < 0 || selectedRoadIndex >= roadSegments.size()) {
+            return;
+        }
+
+        RoadSegment segment = roadSegments.get(selectedRoadIndex);
+
+        EditText editText = new EditText(this);
+        editText.setHint("例：道が狭い、車が多い、夜暗い など");
+        editText.setMinLines(3);
+        editText.setSingleLine(false);
+
+        if (segment.memo != null) {
+            editText.setText(segment.memo);
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("コメント編集")
+                .setMessage(getRoadTypeText(segment.type) + " のコメントを編集します。")
+                .setView(editText)
+                .setPositiveButton("保存", (dialog, which) -> {
+                    segment.memo = editText.getText().toString();
+                    saveRoadSegmentsToJson();
+                    Toast.makeText(this, "コメントを保存しました", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
     }
 }
