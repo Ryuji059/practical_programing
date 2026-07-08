@@ -2,11 +2,7 @@ package jp.ac.gifu_u.info.katsuya.prog;
 
 import android.os.Bundle;
 
-import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 import org.osmdroid.config.Configuration;//osmdroidの設定を行うクラス。
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;//地図データを使うため
 import org.osmdroid.util.GeoPoint;//緯度経度を扱うクラス
@@ -23,7 +19,6 @@ import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polyline;
 import android.graphics.Color;
 import java.util.ArrayList;
-import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -43,6 +38,8 @@ import org.osmdroid.views.overlay.MapEventsOverlay;
 import android.graphics.Point;
 import androidx.appcompat.app.AlertDialog;
 import android.widget.EditText;
+import android.widget.PopupMenu;
+import androidx.appcompat.app.AlertDialog;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -801,19 +798,58 @@ public class MainActivity extends AppCompatActivity {
                         remainSec
                 );
                 //ボタンを作成(タイトル、走行距離、走行時間を表示)押されるとその履歴のルート等を見れるようになります
+                // 履歴1件分の横並びレイアウトを作成
+                LinearLayout rowLayout = new LinearLayout(this);
+                rowLayout.setOrientation(LinearLayout.HORIZONTAL);
+                rowLayout.setPadding(0, 8, 0, 8);
+
+                // 左側：履歴表示ボタン
                 Button historyButton = new Button(this);
                 historyButton.setText(
                         dateText + "\n" +
                                 distanceText + "\n" +
                                 timeText
                 );
-                //押されたときの処理
+
+                // 履歴ボタンを横幅いっぱいに広げる
+                LinearLayout.LayoutParams historyButtonParams =
+                        new LinearLayout.LayoutParams(
+                                0,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                1.0f
+                        );
+                historyButton.setLayoutParams(historyButtonParams);
+
+                // 履歴ボタンを押したら詳細画面へ
                 historyButton.setOnClickListener(v -> {
-                    loadRouteOnHistoryMap(file);//ファイルを読み込み走行履歴を表示
-                    changeMode(AppMode.HISTORY_DETAIL);//モードを変更
+                    loadRouteOnHistoryMap(file);
+                    changeMode(AppMode.HISTORY_DETAIL);
                 });
 
-                historyList.addView(historyButton);//listにボタンを追加
+                // 右側：︙メニューボタン
+                Button menuButton = new Button(this);
+                menuButton.setText("︙");
+                menuButton.setTextSize(22);
+
+                // ︙ボタンの幅
+                LinearLayout.LayoutParams menuButtonParams =
+                        new LinearLayout.LayoutParams(
+                                80,
+                                LinearLayout.LayoutParams.MATCH_PARENT
+                        );
+                menuButton.setLayoutParams(menuButtonParams);
+
+                // ︙を押したらメニュー表示
+                menuButton.setOnClickListener(v -> {
+                    showHistoryPopupMenu(menuButton, file);
+                });
+
+                // 横並びに追加
+                rowLayout.addView(historyButton);
+                rowLayout.addView(menuButton);
+
+                // 履歴一覧に追加
+                historyList.addView(rowLayout);
 
             } catch (Exception e) {//エラー処理
                 e.printStackTrace();
@@ -1516,5 +1552,57 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("キャンセル", null)
                 .show();
+    }
+
+    //ポップアップ表示関数
+    private void showHistoryPopupMenu(View anchor, File file) {
+        PopupMenu popupMenu = new PopupMenu(this, anchor);
+
+        // 今は削除だけ。後で共有や名前変更もここに追加できる
+        popupMenu.getMenu().add("削除");
+
+        //ポップアップの選択時の動作
+        popupMenu.setOnMenuItemClickListener(item -> {
+            String title = item.getTitle().toString();
+
+            if (title.equals("削除")) {
+                showDeleteHistoryConfirmDialog(file);
+                return true;
+            }
+
+            return false;
+        });
+
+        popupMenu.show();
+    }
+
+    //削除の確認をする関数
+    private void showDeleteHistoryConfirmDialog(File file) {
+        new AlertDialog.Builder(this)
+                .setTitle("履歴を削除")
+                .setMessage("この走行履歴を削除しますか？")
+                .setPositiveButton("削除", (dialog, which) -> {
+                    deleteHistoryFile(file);
+                })
+                .setNegativeButton("キャンセル", null)
+                .show();
+    }
+
+    //走行履歴のファイル削除する関数
+    private void deleteHistoryFile(File file) {
+        if (file == null || !file.exists()) {
+            Toast.makeText(this, "履歴ファイルが見つかりません", Toast.LENGTH_SHORT).show();
+            loadHistoryList();
+            return;
+        }
+
+        boolean deleted = file.delete();
+
+        if (deleted) {
+            Toast.makeText(this, "履歴を削除しました", Toast.LENGTH_SHORT).show();
+            loadHistoryList(); // 一覧を更新
+        } else {
+            Toast.makeText(this, "削除に失敗しました", Toast.LENGTH_SHORT).show();
+        }
     }
 }
