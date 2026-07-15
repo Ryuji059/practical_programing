@@ -2098,6 +2098,7 @@ public class MainActivity extends AppCompatActivity {
         popupMenu.getMenu().add("履歴");
         popupMenu.getMenu().add("統計");
         popupMenu.getMenu().add("メンテナンス");
+        popupMenu.getMenu().add("設定");
 
         popupMenu.setOnMenuItemClickListener(item -> {
             String title = item.getTitle().toString();
@@ -2124,6 +2125,11 @@ public class MainActivity extends AppCompatActivity {
 
             if (title.equals("メンテナンス")) {
                 Toast.makeText(this, "メンテナンス画面は今後実装します", Toast.LENGTH_SHORT).show();
+                return true;
+            }
+
+            if (title.equals("設定")) {
+                Toast.makeText(this, "設定画面は今後実装します", Toast.LENGTH_SHORT).show();
                 return true;
             }
 
