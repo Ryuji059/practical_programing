@@ -133,6 +133,8 @@ public class MainActivity extends AppCompatActivity {
     //LocationTrackingServiseから記録した点の緯度経度と累計走行距離を渡すための変数
     private BroadcastReceiver trackingReceiver;//LocationTrackingServiseからデータを受け取るためのBroadcastReceiverを追加
     private ArrayList<GeoPoint> liveRouteGeoPoints = new ArrayList<>();//記録点の格納リスト
+    private View topBar;//トップバー
+    private TextView btnMainMenu;//ハンバーガーメニューボタン
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -219,11 +221,18 @@ public class MainActivity extends AppCompatActivity {
         Button btnEditRoadMemo = findViewById(R.id.btnEditRoadMemo);
         Button btnCancelRoadSelection = findViewById(R.id.btnCancelRoadSelection);
         btnToggleSpeedColor = findViewById(R.id.btnToggleSpeedColor);
+        topBar = findViewById(R.id.topBar);
+        btnMainMenu = findViewById(R.id.btnMainMenu);
 
         //各種ボタンの機能実装
         btnHistoryMode.setOnClickListener(v -> changeMode(AppMode.HISTORY));
         btnRoadEditMode.setOnClickListener(v -> changeMode(AppMode.EDIT_ROAD));
         btnBackMapFromHistory.setOnClickListener(v -> changeMode(AppMode.MAP));
+
+        //ハンバーガーメニューバーの機能実装
+        btnMainMenu.setOnClickListener(v -> {
+            showMainMenu(btnMainMenu);
+        });
 
         //色分けモードのボタン処理
         btnUndoRoadEdit.setOnClickListener(v -> {
@@ -849,17 +858,18 @@ public class MainActivity extends AppCompatActivity {
 
         if (mode == AppMode.MAP) {//通常モードの場合
             titleBar.setText("自転車安全マップ");//タイトルバーの表記を変更
-            titleBar.setBackgroundColor(Color.rgb(67, 160, 71));//タイトルバーの色を変更
+            topBar.setBackgroundColor(Color.rgb(67, 160, 71));//トップバーの色を変更
             recordPanel.setVisibility(View.VISIBLE);//記録と保存のボタンを表示
             roadEditPanel.setVisibility(View.GONE);//色分け用のボタンを非表示に
         } else if (mode == AppMode.EDIT_ROAD) {//色分けモードの場合
             titleBar.setText("色分けモード");//タイトルバーの表記を変更
-            titleBar.setBackgroundColor(Color.rgb(70, 170, 220));//タイトルバーの色を変更
+            topBar.setBackgroundColor(Color.rgb(70, 170, 220));//トップバーの色を変更
             recordPanel.setVisibility(View.GONE);//記録用のボタンを非表示に
             roadEditPanel.setVisibility(View.VISIBLE);//色分け用のボタンを表示
             isRecording = false;
         } else if (mode == AppMode.RECORDING) {//記録中の場合
             titleBar.setText("記録中");//タイトルバーの表記を変更
+            topBar.setBackgroundColor(Color.rgb(67, 160, 71));//トップバーの色を変更
             recordPanel.setVisibility(View.VISIBLE);//記録と保存のボタンを表示
             roadEditPanel.setVisibility(View.GONE);//色分け用のボタンを非表示に
         }
@@ -2077,5 +2087,49 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(this, LocationTrackingService.class);
         intent.setAction(LocationTrackingService.ACTION_REQUEST_ROUTE);
         startService(intent);
+    }
+
+    //ハンバーガーメニューバーの表示メソッド
+    private void showMainMenu(View anchor) {
+        PopupMenu popupMenu = new PopupMenu(this, anchor);
+
+        popupMenu.getMenu().add("地図");
+        popupMenu.getMenu().add("色分け");
+        popupMenu.getMenu().add("履歴");
+        popupMenu.getMenu().add("統計");
+        popupMenu.getMenu().add("メンテナンス");
+
+        popupMenu.setOnMenuItemClickListener(item -> {
+            String title = item.getTitle().toString();
+
+            if (title.equals("地図")) {
+                changeMode(AppMode.MAP);
+                return true;
+            }
+
+            if (title.equals("色分け")) {
+                changeMode(AppMode.EDIT_ROAD);
+                return true;
+            }
+
+            if (title.equals("履歴")) {
+                changeMode(AppMode.HISTORY);
+                return true;
+            }
+
+            if (title.equals("統計")) {
+                Toast.makeText(this, "統計画面は今後実装します", Toast.LENGTH_SHORT).show();
+                return true;
+            }
+
+            if (title.equals("メンテナンス")) {
+                Toast.makeText(this, "メンテナンス画面は今後実装します", Toast.LENGTH_SHORT).show();
+                return true;
+            }
+
+            return false;
+        });
+
+        popupMenu.show();
     }
 }

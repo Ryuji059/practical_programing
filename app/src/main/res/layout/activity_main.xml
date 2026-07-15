@@ -13,15 +13,36 @@
         android:orientation="vertical">
 
         <!-- 上部タイトルバー -->
-        <TextView
-            android:id="@+id/titleBar"
+        <RelativeLayout
+            android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:gravity="center"
-            android:text="自転車安全マップ"
-            android:textSize="22sp"
-            android:textColor="#FFFFFF"
-            android:background="#43A047" />
+            android:background="#43A047">
+
+            <!-- 左上のメニューボタン -->
+            <TextView
+                android:id="@+id/btnMainMenu"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:layout_alignParentStart="true"
+                android:gravity="center"
+                android:text="≡"
+                android:textSize="30sp"
+                android:textColor="#FFFFFF"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <!-- 中央タイトル -->
+            <TextView
+                android:id="@+id/titleBar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="自転車安全マップ"
+                android:textSize="22sp"
+                android:textColor="#FFFFFF" />
+
+        </RelativeLayout>
 
         <!-- 地図エリア -->
         <FrameLayout
