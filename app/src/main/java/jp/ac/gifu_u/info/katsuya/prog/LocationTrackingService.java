@@ -54,6 +54,21 @@ public class LocationTrackingService extends Service {
     private static final double STOP_JITTER_DISTANCE = 8.0;
     private static final float STOP_JITTER_SPEED = 0.8f;
 
+    public static final String ACTION_LOCATION_UPDATE =
+            "jp.ac.gifu_u.info.katsuya.prog.ACTION_LOCATION_UPDATE";
+
+    public static final String ACTION_REQUEST_ROUTE =
+            "jp.ac.gifu_u.info.katsuya.prog.ACTION_REQUEST_ROUTE";
+
+    public static final String ACTION_ROUTE_SNAPSHOT =
+            "jp.ac.gifu_u.info.katsuya.prog.ACTION_ROUTE_SNAPSHOT";
+
+    public static final String EXTRA_ROUTE_JSON = "extra_route_json";
+
+    public static final String EXTRA_LAT = "extra_lat";
+    public static final String EXTRA_LON = "extra_lon";
+    public static final String EXTRA_DISTANCE = "extra_distance";
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -79,6 +94,8 @@ public class LocationTrackingService extends Service {
             startTracking();
         } else if (ACTION_STOP.equals(intent.getAction())) {
             stopTracking();
+        } else if (ACTION_REQUEST_ROUTE.equals(intent.getAction())) {
+            sendRouteSnapshotToActivity();
         }
 
         return START_STICKY;
@@ -225,6 +242,8 @@ public class LocationTrackingService extends Service {
 
         routePoints.add(routePoint);
         lastRoutePoint = routePoint;
+
+        sendLocationUpdateToActivity(lat, lon, totalDistance);
 
         Log.d("TRACKING_SERVICE",
                 "記録点追加 provider=" + provider +
@@ -377,5 +396,45 @@ public class LocationTrackingService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void sendLocationUpdateToActivity(double lat, double lon, double distance) {
+        Intent intent = new Intent(ACTION_LOCATION_UPDATE);
+        intent.setPackage(getPackageName());
+
+        intent.putExtra(EXTRA_LAT, lat);
+        intent.putExtra(EXTRA_LON, lon);
+        intent.putExtra(EXTRA_DISTANCE, distance);
+
+        sendBroadcast(intent);
+    }
+
+    private void sendRouteSnapshotToActivity() {
+        try {
+            JSONArray pointsArray = new JSONArray();
+
+            for (RoutePoint p : routePoints) {
+                JSONObject pointJson = new JSONObject();
+
+                pointJson.put("lat", p.lat);
+                pointJson.put("lon", p.lon);
+                pointJson.put("time", p.time);
+                pointJson.put("speed", p.speed);
+                pointJson.put("distance", p.distance);
+
+                pointsArray.put(pointJson);
+            }
+
+            Intent intent = new Intent(ACTION_ROUTE_SNAPSHOT);
+            intent.setPackage(getPackageName());
+            intent.putExtra(EXTRA_ROUTE_JSON, pointsArray.toString());
+
+            sendBroadcast(intent);
+
+            Log.d("TRACKING_SERVICE", "ルート一覧を送信 points=" + routePoints.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

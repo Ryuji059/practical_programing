@@ -44,6 +44,11 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.os.Build;
+import androidx.core.content.ContextCompat;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -125,6 +130,9 @@ public class MainActivity extends AppCompatActivity {
     private static final double MAX_REASONABLE_SPEED_KMH = 60.0; // 自転車として異常な速度[km/h]
     private static final double STOP_JITTER_DISTANCE = 8.0; // 停止中ブレとみなす距離[m]
     private static final float STOP_JITTER_SPEED = 0.8f; // 停止中ブレとみなすGPS速度[m/s]
+    //LocationTrackingServiseから記録した点の緯度経度と累計走行距離を渡すための変数
+    private BroadcastReceiver trackingReceiver;//LocationTrackingServiseからデータを受け取るためのBroadcastReceiverを追加
+    private ArrayList<GeoPoint> liveRouteGeoPoints = new ArrayList<>();//記録点の格納リスト
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -453,6 +461,7 @@ public class MainActivity extends AppCompatActivity {
             // MainActivity側の表示用ルート線は一度消す
             // Service側で記録するので、ここでは保存用データは初期化しない
             routeLine.setPoints(new ArrayList<>());
+            liveRouteGeoPoints.clear();//表示用ルートを初期化
             map.invalidate();
 
             //フォアグラウンドサービスを開始
@@ -505,6 +514,41 @@ public class MainActivity extends AppCompatActivity {
                 detailPanelOpen = true;
             }
         });
+
+        //Receiverの作成
+        trackingReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+
+                if (LocationTrackingService.ACTION_LOCATION_UPDATE.equals(action)) {
+                    double lat = intent.getDoubleExtra(LocationTrackingService.EXTRA_LAT, 0.0);
+                    double lon = intent.getDoubleExtra(LocationTrackingService.EXTRA_LON, 0.0);
+
+                    addLiveRoutePoint(lat, lon);
+
+                    if (isRecording && isFollowingCurrentLocation && currentPoint != null) {
+                        map.getController().animateTo(currentPoint);
+                    }
+
+                    map.invalidate();
+                    return;
+                }
+
+                if (LocationTrackingService.ACTION_ROUTE_SNAPSHOT.equals(action)) {
+                    String routeJsonText = intent.getStringExtra(LocationTrackingService.EXTRA_ROUTE_JSON);
+
+                    restoreLiveRouteFromJson(routeJsonText);
+
+                    if (isRecording && isFollowingCurrentLocation && currentPoint != null) {
+                        map.getController().animateTo(currentPoint);
+                    }
+
+                    map.invalidate();
+                }
+            }
+        };
+
         startLocationUpdates();//GPS情報の取得を開始
         changeMode(AppMode.MAP);//マップモードを地図に変更する
     }
@@ -529,6 +573,38 @@ public class MainActivity extends AppCompatActivity {
         }
         if (historyMap != null) {
             historyMap.onPause();
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(LocationTrackingService.ACTION_LOCATION_UPDATE);
+        filter.addAction(LocationTrackingService.ACTION_ROUTE_SNAPSHOT);
+
+        ContextCompat.registerReceiver(
+                this,
+                trackingReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+        );
+
+        // 記録中に画面復帰した場合、Serviceから現在までのルートをもらう
+        if (isRecording) {
+            requestRouteSnapshotFromService();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+
+        try {
+            unregisterReceiver(trackingReceiver);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -1931,5 +2007,75 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return false;
+    }
+    //表示用ルート追加メソッド
+    private void addLiveRoutePoint(double lat, double lon) {
+        GeoPoint point = new GeoPoint(lat, lon);
+
+        if (!liveRouteGeoPoints.isEmpty()) {
+            GeoPoint lastPoint = liveRouteGeoPoints.get(liveRouteGeoPoints.size() - 1);
+
+            float[] result = new float[1];
+
+            Location.distanceBetween(
+                    lastPoint.getLatitude(),
+                    lastPoint.getLongitude(),
+                    lat,
+                    lon,
+                    result
+            );
+
+            // ほぼ同じ点なら重複追加しない
+            if (result[0] < 0.5) {
+                return;
+            }
+        }
+
+        currentPoint = point;
+
+        liveRouteGeoPoints.add(point);
+        routeLine.setPoints(new ArrayList<>(liveRouteGeoPoints));
+    }
+
+    //ルート復元メソッド
+    private void restoreLiveRouteFromJson(String routeJsonText) {
+        try {
+            if (routeJsonText == null || routeJsonText.isEmpty()) {
+                return;
+            }
+
+            JSONArray pointsArray = new JSONArray(routeJsonText);
+
+            liveRouteGeoPoints.clear();
+
+            for (int i = 0; i < pointsArray.length(); i++) {
+                JSONObject pointJson = pointsArray.getJSONObject(i);
+
+                double lat = pointJson.getDouble("lat");
+                double lon = pointJson.getDouble("lon");
+
+                GeoPoint point = new GeoPoint(lat, lon);
+                liveRouteGeoPoints.add(point);
+            }
+
+            routeLine.setPoints(new ArrayList<>(liveRouteGeoPoints));
+
+            if (!liveRouteGeoPoints.isEmpty()) {
+                currentPoint = liveRouteGeoPoints.get(liveRouteGeoPoints.size() - 1);
+            }
+
+            Log.d("LIVE_ROUTE", "画面復帰時にルート復元 points=" + liveRouteGeoPoints.size());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "記録中ルートの復元に失敗しました", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    //Serviceへルート一覧を要求するメソッド
+    private void requestRouteSnapshotFromService() {
+        Intent intent = new Intent(this, LocationTrackingService.class);
+        intent.setAction(LocationTrackingService.ACTION_REQUEST_ROUTE);
+        startService(intent);
     }
 }
