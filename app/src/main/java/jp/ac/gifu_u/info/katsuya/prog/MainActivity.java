@@ -56,7 +56,10 @@ public class MainActivity extends AppCompatActivity {
         RECORDING,      // 記録中
         HISTORY,        // 履歴表示
         HISTORY_DETAIL, // 走行経路の表示
-        EDIT_ROAD       // 道路色分け
+        EDIT_ROAD,      // 道路色分け
+        STATISTICS,     //統計情報
+        MAINTENANCE,    //メンテナンス記録
+        SETTINGS        //設定
     }
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
