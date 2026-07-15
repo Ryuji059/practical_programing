@@ -646,6 +646,13 @@
                     android:textSize="18sp" />
 
                 <TextView
+                    android:id="@+id/statTotalStopCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="累計停止回数: -"
+                    android:textSize="18sp" />
+
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="【最高記録】"
@@ -680,6 +687,122 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="最高GPS速度: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statMaxMovingAverageSpeed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最高移動中平均速度: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statLongestStopTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最長停止時間: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="12dp"
+                    android:text="【速度分布】"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/statSpeed0to5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="0～5 km/h: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statSpeed5to10"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="5～10 km/h: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statSpeed10to15"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="10～15 km/h: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statSpeed15to20"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="15～20 km/h: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statSpeed20to25"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="20～25 km/h: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statSpeed25to30"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="25～30 km/h: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statSpeed30Over"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="30 km/h以上: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="12dp"
+                    android:text="【1回の走行距離分布】"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/statDistance0to5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="0～5 km: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statDistance5to10"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="5～10 km: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statDistance10to20"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="10～20 km: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statDistance20to50"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="20～50 km: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statDistance50Over"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="50 km以上: -"
                     android:textSize="18sp" />
 
             </LinearLayout>

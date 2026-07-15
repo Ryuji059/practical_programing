@@ -139,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
     private View topBar;//トップバー
     private TextView btnMainMenu;//ハンバーガーメニューボタン
     //統計用の変数
-    private View statisticsLayout;
+    private View statisticsLayout;//統計用のレイアウト
 
     private TextView statTotalRideCount;
     private TextView statTotalDistance;
@@ -153,6 +153,24 @@ public class MainActivity extends AppCompatActivity {
     private TextView statMaxGpsSpeed;
 
     private TextView btnStatisticsMenu;
+    private TextView statTotalStopCount;
+
+    private TextView statMaxMovingAverageSpeed;
+    private TextView statLongestStopTime;
+
+    private TextView statSpeed0to5;
+    private TextView statSpeed5to10;
+    private TextView statSpeed10to15;
+    private TextView statSpeed15to20;
+    private TextView statSpeed20to25;
+    private TextView statSpeed25to30;
+    private TextView statSpeed30Over;
+
+    private TextView statDistance0to5;
+    private TextView statDistance5to10;
+    private TextView statDistance10to20;
+    private TextView statDistance20to50;
+    private TextView statDistance50Over;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -557,6 +575,26 @@ public class MainActivity extends AppCompatActivity {
         statMaxGpsSpeed = findViewById(R.id.statMaxGpsSpeed);
 
         btnStatisticsMenu = findViewById(R.id.btnStatisticsMenu);
+
+        statTotalStopCount = findViewById(R.id.statTotalStopCount);
+
+        statMaxMovingAverageSpeed = findViewById(R.id.statMaxMovingAverageSpeed);
+
+        statLongestStopTime = findViewById(R.id.statLongestStopTime);
+
+        statSpeed0to5 = findViewById(R.id.statSpeed0to5);
+        statSpeed5to10 = findViewById(R.id.statSpeed5to10);
+        statSpeed10to15 = findViewById(R.id.statSpeed10to15);
+        statSpeed15to20 = findViewById(R.id.statSpeed15to20);
+        statSpeed20to25 = findViewById(R.id.statSpeed20to25);
+        statSpeed25to30 = findViewById(R.id.statSpeed25to30);
+        statSpeed30Over = findViewById(R.id.statSpeed30Over);
+
+        statDistance0to5 = findViewById(R.id.statDistance0to5);
+        statDistance5to10 = findViewById(R.id.statDistance5to10);
+        statDistance10to20 = findViewById(R.id.statDistance10to20);
+        statDistance20to50 = findViewById(R.id.statDistance20to50);
+        statDistance50Over = findViewById(R.id.statDistance50Over);
 
         //統計関連用のボタンの実装
         btnStatisticsMenu.setOnClickListener(v -> {
@@ -2202,6 +2240,30 @@ public class MainActivity extends AppCompatActivity {
                 statMaxAverageSpeed.setText("最高平均速度: 0.0 km/h");
                 statMaxGpsSpeed.setText("最高GPS速度: 0.0 km/h");
 
+                statTotalStopCount.setText("累計停止回数: 0回");
+
+                statMaxMovingAverageSpeed.setText(
+                        "最高移動中平均速度: 0.0 km/h"
+                );
+
+                statLongestStopTime.setText(
+                        "最長停止時間: 0分00秒"
+                );
+
+                statSpeed0to5.setText("0～5 km/h: 0.0%（0分00秒）");
+                statSpeed5to10.setText("5～10 km/h: 0.0%（0分00秒）");
+                statSpeed10to15.setText("10～15 km/h: 0.0%（0分00秒）");
+                statSpeed15to20.setText("15～20 km/h: 0.0%（0分00秒）");
+                statSpeed20to25.setText("20～25 km/h: 0.0%（0分00秒）");
+                statSpeed25to30.setText("25～30 km/h: 0.0%（0分00秒）");
+                statSpeed30Over.setText("30 km/h以上: 0.0%（0分00秒）");
+
+                statDistance0to5.setText("0～5 km: 0回");
+                statDistance5to10.setText("5～10 km: 0回");
+                statDistance10to20.setText("10～20 km: 0回");
+                statDistance20to50.setText("20～50 km: 0回");
+                statDistance50Over.setText("50 km以上: 0回");
+
                 return;
             }
 
@@ -2214,8 +2276,23 @@ public class MainActivity extends AppCompatActivity {
             JSONObject recordsJson =
                     rootJson.optJSONObject("records");
 
-            if (summaryJson == null || recordsJson == null) {
-                Toast.makeText(this, "統計データの形式が正しくありません", Toast.LENGTH_SHORT).show();
+            JSONObject speedDistributionJson =
+                    rootJson.optJSONObject("speedDistribution");
+
+            JSONObject distanceDistributionJson =
+                    rootJson.optJSONObject("distanceDistribution");
+
+            if (summaryJson == null
+                    || recordsJson == null
+                    || speedDistributionJson == null
+                    || distanceDistributionJson == null) {
+
+                Toast.makeText(
+                        this,
+                        "統計データの形式が正しくありません",
+                        Toast.LENGTH_SHORT
+                ).show();
+
                 return;
             }
 
@@ -2246,6 +2323,69 @@ public class MainActivity extends AppCompatActivity {
             double maxGpsSpeed =
                     recordsJson.optDouble("maxGpsSpeed", 0.0);
 
+            int totalStopCount =
+                    summaryJson.optInt("totalStopCount", 0);
+
+            double maxMovingAverageSpeed =
+                    recordsJson.optDouble(
+                            "maxMovingAverageSpeed",
+                            0.0
+                    );
+
+            double longestStopTime =
+                    recordsJson.optDouble(
+                            "longestStopTime",
+                            0.0
+                    );
+
+            //速度分布
+            double time0to5 =
+                    speedDistributionJson.optDouble("time0to5", 0.0);
+
+            double time5to10 =
+                    speedDistributionJson.optDouble("time5to10", 0.0);
+
+            double time10to15 =
+                    speedDistributionJson.optDouble("time10to15", 0.0);
+
+            double time15to20 =
+                    speedDistributionJson.optDouble("time15to20", 0.0);
+
+            double time20to25 =
+                    speedDistributionJson.optDouble("time20to25", 0.0);
+
+            double time25to30 =
+                    speedDistributionJson.optDouble("time25to30", 0.0);
+
+            double time30Over =
+                    speedDistributionJson.optDouble("time30Over", 0.0);
+
+            //距離分布
+            int ride0to5km =
+                    distanceDistributionJson.optInt("ride0to5km", 0);
+
+            int ride5to10km =
+                    distanceDistributionJson.optInt("ride5to10km", 0);
+
+            int ride10to20km =
+                    distanceDistributionJson.optInt("ride10to20km", 0);
+
+            int ride20to50km =
+                    distanceDistributionJson.optInt("ride20to50km", 0);
+
+            int ride50kmOver =
+                    distanceDistributionJson.optInt("ride50kmOver", 0);
+
+            //トータルの時間を求める
+            double totalSpeedDistributionTime =
+                    time0to5
+                            + time5to10
+                            + time10to15
+                            + time15to20
+                            + time20to25
+                            + time25to30
+                            + time30Over;
+
             statTotalRideCount.setText(
                     "総走行回数: " + totalRideCount + "回"
             );
@@ -2268,6 +2408,23 @@ public class MainActivity extends AppCompatActivity {
                     "総停止時間: " + formatStatisticsTime((long) totalStopTime)
             );
 
+            statTotalStopCount.setText(String.format(
+                    Locale.JAPAN,
+                    "累計停止回数: %d回",
+                    totalStopCount
+            ));
+
+            statMaxMovingAverageSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "最高移動中平均速度: %.1f km/h",
+                    maxMovingAverageSpeed * 3.6
+            ));
+
+            statLongestStopTime.setText(
+                    "最長停止時間: "
+                            + formatStatisticsTime((long) longestStopTime)
+            );
+
             statMaxDistance.setText(String.format(
                     Locale.JAPAN,
                     "最長1回走行距離: %.2f km",
@@ -2288,6 +2445,87 @@ public class MainActivity extends AppCompatActivity {
                     Locale.JAPAN,
                     "最高GPS速度: %.1f km/h",
                     maxGpsSpeed * 3.6
+            ));
+
+            //速度分布
+            statSpeed0to5.setText(String.format(
+                    Locale.JAPAN,
+                    "0～5 km/h: %.1f%%（%s）",
+                    calculatePercentage(time0to5, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time0to5)
+            ));
+
+            statSpeed5to10.setText(String.format(
+                    Locale.JAPAN,
+                    "5～10 km/h: %.1f%%（%s）",
+                    calculatePercentage(time5to10, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time5to10)
+            ));
+
+            statSpeed10to15.setText(String.format(
+                    Locale.JAPAN,
+                    "10～15 km/h: %.1f%%（%s）",
+                    calculatePercentage(time10to15, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time10to15)
+            ));
+
+            statSpeed15to20.setText(String.format(
+                    Locale.JAPAN,
+                    "15～20 km/h: %.1f%%（%s）",
+                    calculatePercentage(time15to20, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time15to20)
+            ));
+
+            statSpeed20to25.setText(String.format(
+                    Locale.JAPAN,
+                    "20～25 km/h: %.1f%%（%s）",
+                    calculatePercentage(time20to25, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time20to25)
+            ));
+
+            statSpeed25to30.setText(String.format(
+                    Locale.JAPAN,
+                    "25～30 km/h: %.1f%%（%s）",
+                    calculatePercentage(time25to30, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time25to30)
+            ));
+
+            statSpeed30Over.setText(String.format(
+                    Locale.JAPAN,
+                    "30 km/h以上: %.1f%%（%s）",
+                    calculatePercentage(time30Over, totalSpeedDistributionTime),
+                    formatStatisticsTime((long) time30Over)
+            ));
+
+            //距離分布
+            statDistance0to5.setText(String.format(
+                    Locale.JAPAN,
+                    "0～5 km: %d回",
+                    ride0to5km
+            ));
+
+            statDistance5to10.setText(String.format(
+                    Locale.JAPAN,
+                    "5～10 km: %d回",
+                    ride5to10km
+            ));
+
+            statDistance10to20.setText(String.format(
+                    Locale.JAPAN,
+                    "10～20 km: %d回",
+                    ride10to20km
+            ));
+
+            statDistance20to50.setText(String.format(
+                    Locale.JAPAN,
+                    "20～50 km: %d回",
+                    ride20to50km
+            ));
+
+            statDistance50Over.setText(String.format(
+                    Locale.JAPAN,
+                    "50 km以上: %d回",
+                    ride50kmOver
             ));
 
             Log.d("STATISTICS", "統計画面の読み込み成功");
@@ -2320,5 +2558,17 @@ public class MainActivity extends AppCompatActivity {
                 minutes,
                 seconds
         );
+    }
+
+    //割合計算用の関数
+    private double calculatePercentage(
+            double value,
+            double total
+    ) {
+        if (total <= 0.0) {
+            return 0.0;
+        }
+
+        return value / total * 100.0;
     }
 }
