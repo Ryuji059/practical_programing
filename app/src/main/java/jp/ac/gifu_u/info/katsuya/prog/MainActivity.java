@@ -372,31 +372,32 @@ public class MainActivity extends AppCompatActivity {
 
         //地図に線を書き入れるための処理
         MapEventsReceiver receiver = new MapEventsReceiver() {
+            //地図をシングルタップした時の動作
             @Override
             public boolean singleTapConfirmedHelper(GeoPoint p) {
-                if (currentMode == AppMode.EDIT_ROAD) {
-                    clearSelectedRoadSegment();
+                if (currentMode == AppMode.EDIT_ROAD) {//色分けモードの時(地図に線を引く)
+                    clearSelectedRoadSegment();//道路区間の選択をリセット
 
-                    RoadType selectedType = getSelectedRoadType();
+                    RoadType selectedType = getSelectedRoadType();//選択中のロードタイプを取得
 
-                    if (editingRoad == null) {
+                    if (editingRoad == null) {//新しく引く場合は、インスタンスを作る
                         editingRoad = new RoadSegment(selectedType);
                     }
 
-                    editingRoad.type = selectedType;
-                    editingRoad.points.add(p);
+                    editingRoad.type = selectedType;//区分をれらばれているものに変更
+                    editingRoad.points.add(p);//タップした点の座標を記録
 
-                    roadPreviewLine.setPoints(editingRoad.points);
-                    roadPreviewLine.setColor(getColorByRoadType(editingRoad.type));
+                    roadPreviewLine.setPoints(editingRoad.points);//線を引く
+                    roadPreviewLine.setColor(getColorByRoadType(editingRoad.type));//線の色を区分に沿って変更
 
-                    map.invalidate();
+                    map.invalidate();//地図を再描画
                     return true;
                 }
 
-                if (currentMode == AppMode.MAP) {
-                    int index = findNearestRoadSegmentIndex(p);
+                if (currentMode == AppMode.MAP) {//地図モードの時(コメントを表示)
+                    int index = findNearestRoadSegmentIndex(p);//タップした区画を探索
 
-                    if (index != -1) {
+                    if (index != -1) {//見つかった場合、その区画のコメントを表示
                         showRoadSegmentMemoDialog(index);
                         return true;
                     }
@@ -405,17 +406,19 @@ public class MainActivity extends AppCompatActivity {
                 return false;
             }
 
+            //地図を長押しした時の処理
             @Override
             public boolean longPressHelper(GeoPoint p) {
-                if (currentMode == AppMode.EDIT_ROAD) {
-                    int index = findNearestRoadSegmentIndex(p);
+                if (currentMode == AppMode.EDIT_ROAD) {//色分けモード時、区画を選択
+                    int index = findNearestRoadSegmentIndex(p);//長押ししている当たりの区画を探索
 
-                    if (index == -1) {
+                    if (index == -1) {//見つからなかった場合は、「近くに線がありません」と表示
                         clearSelectedRoadSegment();
                         Toast.makeText(MainActivity.this, "近くに線がありません", Toast.LENGTH_SHORT).show();
                         return true;
                     }
 
+                    //見つかった場合は、線を太くして「線を選択しました」と表示
                     selectRoadSegment(index);
                     Toast.makeText(MainActivity.this, "線を選択しました", Toast.LENGTH_SHORT).show();
                     return true;
@@ -425,6 +428,7 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
+        //mapEventOverlayを作成し、マップに追加
         mapEventsOverlay = new MapEventsOverlay(receiver);
         map.getOverlays().add(mapEventsOverlay);
 
@@ -444,16 +448,18 @@ public class MainActivity extends AppCompatActivity {
 
             isRecording = true;
             isFollowingCurrentLocation = true;
-            changeMode(AppMode.RECORDING);
+            changeMode(AppMode.RECORDING);//記録モードに
 
             // MainActivity側の表示用ルート線は一度消す
             // Service側で記録するので、ここでは保存用データは初期化しない
             routeLine.setPoints(new ArrayList<>());
             map.invalidate();
 
+            //フォアグラウンドサービスを開始
             Intent intent = new Intent(this, LocationTrackingService.class);
             intent.setAction(LocationTrackingService.ACTION_START);
 
+            //アンドロイドのバージョンによって開始するための呼び出し関数が変わるので分けて書く
             if (android.os.Build.VERSION.SDK_INT >= 26) {
                 startForegroundService(intent);
             } else {
@@ -473,18 +479,20 @@ public class MainActivity extends AppCompatActivity {
             isRecording = false;
             isFollowingCurrentLocation = false;
 
+            //フォアグラウンドサービスの終了
             Intent intent = new Intent(this, LocationTrackingService.class);
             intent.setAction(LocationTrackingService.ACTION_STOP);
             startService(intent);
 
             Toast.makeText(this, "記録を停止して保存しました", Toast.LENGTH_SHORT).show();
 
-            changeMode(AppMode.MAP);
+            changeMode(AppMode.MAP);//地図モードに変更
         });
 
+        //速度色分け切り替えボタンの処理
         btnToggleSpeedColor.setOnClickListener(v -> {
-            isSpeedColorMode = !isSpeedColorMode;
-            updateHistoryRouteDisplay();
+            isSpeedColorMode = !isSpeedColorMode;//booleanを反転させる
+            updateHistoryRouteDisplay();//線の切り替え表示処理
         });
 
         //走行履歴の詳細データの表示用パネルの設定
@@ -589,6 +597,7 @@ public class MainActivity extends AppCompatActivity {
                     map.getOverlays().add(currentMarker);
                 }
 
+                //現在地にピンを指す
                 currentMarker.setPosition(currentPoint);
                 currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
@@ -602,14 +611,14 @@ public class MainActivity extends AppCompatActivity {
                 );
             }
         };
-
+        //GPS位置情報の更新リクエスト(5mまたは3sおきに更新要求)
         locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
                 3000,
                 5,
                 listener
         );
-
+        //ネットワーク位置情報の更新リクエスト(5mまたは3sおきに更新要求)
         locationManager.requestLocationUpdates(
                 LocationManager.NETWORK_PROVIDER,
                 3000,
@@ -618,6 +627,7 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    //権限がない場合の処理
     @Override
     public void onRequestPermissionsResult(
             int requestCode,
@@ -1118,6 +1128,7 @@ public class MainActivity extends AppCompatActivity {
                 totalMovingTimeForSpeed = 1.0;
             }
 
+            //詳細データ表示欄を入力
             detailMovingTime.setText(String.format(
                     Locale.JAPAN,
                     "移動時間: %d分%02d秒",
@@ -1225,14 +1236,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //dpに値を変換する
     private float dp(float value) {
         return value * getResources().getDisplayMetrics().density;
     }
 
+    //整数dpに値を変換する
     private int dpInt(float value) {
         return (int) (value * getResources().getDisplayMetrics().density);
     }
 
+    //選ばれているラジオボタンに応じて区分を設定する関数
     private RoadType getSelectedRoadType() {
         int checkedId = radioRoadType.getCheckedRadioButtonId();
 
@@ -1245,6 +1259,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //区分に応じて色を返す関数
     private int getColorByRoadType(RoadType type) {
         if (type == RoadType.SIDEWALK) {
             return Color.BLUE;
@@ -1258,17 +1273,17 @@ public class MainActivity extends AppCompatActivity {
     //色分けデータの保存用関数
     private void saveRoadSegmentsToJson() {
         try {
-            JSONObject rootJson = new JSONObject();
-            JSONArray segmentsArray = new JSONArray();
+            JSONObject rootJson = new JSONObject();//からのJSONオブジェクトを作成
+            JSONArray segmentsArray = new JSONArray();//からの配列を作成
 
-            for (RoadSegment segment : roadSegments) {
-                JSONObject segmentJson = new JSONObject();
+            for (RoadSegment segment : roadSegments) {//記録したロードセグメント毎に実行
+                JSONObject segmentJson = new JSONObject();//からのオブジェクトを作成
 
-                segmentJson.put("type", segment.type.name());
-                segmentJson.put("memo", segment.memo);
+                segmentJson.put("type", segment.type.name());//JSONオブジェクト内に「"type":segment.type.name()」を入れる
+                segmentJson.put("memo", segment.memo);//JSONオブジェクト内に「"memo":segment.memo」を入れる
 
-                JSONArray pointsArray = new JSONArray();
-
+                JSONArray pointsArray = new JSONArray();//からの配列を作成
+                //配列にRoadSegmentのpointsを入れる
                 for (GeoPoint p : segment.points) {
                     JSONObject pointJson = new JSONObject();
                     pointJson.put("lat", p.getLatitude());
@@ -1276,12 +1291,13 @@ public class MainActivity extends AppCompatActivity {
                     pointsArray.put(pointJson);
                 }
 
-                segmentJson.put("points", pointsArray);
-                segmentsArray.put(segmentJson);
+                segmentJson.put("points", pointsArray);//segmentJsonというオブジェクトにpointsの入った配列を置く
+                segmentsArray.put(segmentJson);//segmentArrayにsegmentJsonを置く
             }
 
-            rootJson.put("segments", segmentsArray);
+            rootJson.put("segments", segmentsArray);//rootJsonにsegmentsという名前でsegmentArrayを置く
 
+            //JSONファイルとして保存する処理
             File file = new File(getFilesDir(), "roads.json");
 
             FileOutputStream fos = new FileOutputStream(file);
@@ -1299,12 +1315,13 @@ public class MainActivity extends AppCompatActivity {
     //色分け用データの読み込み関数
     private void loadRoadSegmentsFromJson() {
         try {
-            File file = new File(getFilesDir(), "roads.json");
+            File file = new File(getFilesDir(), "roads.json");//ファイル名roads.jsonを探す
 
-            if (!file.exists()) {
+            if (!file.exists()) {//ないなら終了
                 return;
             }
 
+            //JSONファイルを読み込み
             String jsonText = readTextFile(file);
             JSONObject rootJson = new JSONObject(jsonText);
             JSONArray segmentsArray = rootJson.getJSONArray("segments");
@@ -1317,6 +1334,7 @@ public class MainActivity extends AppCompatActivity {
             roadLines.clear();
             roadSegments.clear();
 
+            //各区分のデータを取得
             for (int i = 0; i < segmentsArray.length(); i++) {
                 JSONObject segmentJson = segmentsArray.getJSONObject(i);
 
@@ -1328,6 +1346,7 @@ public class MainActivity extends AppCompatActivity {
 
                 JSONArray pointsArray = segmentJson.getJSONArray("points");
 
+                //線を引くためのデータ(点)を取得
                 for (int j = 0; j < pointsArray.length(); j++) {
                     JSONObject pointJson = pointsArray.getJSONObject(j);
 
@@ -1337,11 +1356,12 @@ public class MainActivity extends AppCompatActivity {
                     segment.points.add(new GeoPoint(lat, lon));
                 }
 
+                //区分を追加
                 roadSegments.add(segment);
-
+                //線を描画する処理
                 Polyline line = new Polyline();
                 line.setPoints(new ArrayList<>(segment.points));
-                line.setColor(getColorByRoadType(segment.type));
+                line.setColor(getColorByRoadType(segment.type));//色は区分によって変える
                 line.setWidth(10.0f);
 
                 map.getOverlays().add(line);
@@ -1362,12 +1382,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    //選択の関数
+    //道路区分選択の関数
     private void selectRoadSegment(int index) {
-        clearSelectedRoadSegment();
+        clearSelectedRoadSegment();//前の選択を消す
 
-        selectedRoadIndex = index;
+        selectedRoadIndex = index;//選択したものに変化させる
 
+        //選択したRoadSegmentとそれによって引かれる線を取得
         RoadSegment selectedSegment = roadSegments.get(index);
         Polyline selectedLine = roadLines.get(index);
 
@@ -1408,26 +1429,29 @@ public class MainActivity extends AppCompatActivity {
 
     //タップ位置に一番近い線を探す関数
     private int findNearestRoadSegmentIndex(GeoPoint tapPoint) {
-        int nearestIndex = -1;
+        int nearestIndex = -1;//選択をリセット
         double nearestDistance = Double.MAX_VALUE;
 
-        Point tapScreenPoint = new Point();
+        Point tapScreenPoint = new Point();//触った場所の座標を取得
         map.getProjection().toPixels(tapPoint, tapScreenPoint);
 
         for (int i = 0; i < roadSegments.size(); i++) {
             RoadSegment segment = roadSegments.get(i);
-
-            if (segment.points.size() < 2) {
+            if (segment.points.size() < 2) {//とってきたRoadSegmentが点だった時は無視する
                 continue;
             }
 
+            //RoadSegmentに含まれるすべての線分と触った位置との距離を計算
             for (int j = 0; j < segment.points.size() - 1; j++) {
+
                 Point p1 = new Point();
                 Point p2 = new Point();
 
+                //セグメントのj,j+1番目の座標(緯度経度)を画面のピクセルの座標に変換
                 map.getProjection().toPixels(segment.points.get(j), p1);
                 map.getProjection().toPixels(segment.points.get(j + 1), p2);
 
+                //p1、p2によってできる線分とタップした位置との画面上の距離を計算
                 double distance = distancePointToSegment(
                         tapScreenPoint.x,
                         tapScreenPoint.y,
@@ -1437,21 +1461,22 @@ public class MainActivity extends AppCompatActivity {
                         p2.y
                 );
 
+                //最も近いものを選ぶ
                 if (distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearestIndex = i;
+                    nearestDistance = distance;//最短距離の更新
+                    nearestIndex = i;//最短距離が更新されたらその区間を候補として持つ
                 }
             }
         }
 
-        // 画面上でこの距離以内なら選択できる
+        // 画面上でこの距離以内なら選択
         double threshold = 40.0;
 
         if (nearestDistance <= threshold) {
-            return nearestIndex;
+            return nearestIndex;//最も近かった色分けの区分のインデックスを返す
         }
 
-        return -1;
+        return -1;//見つからなかったら-1を返す
     }
 
     //点と線分の距離を求める関数
@@ -1466,12 +1491,18 @@ public class MainActivity extends AppCompatActivity {
         double dx = x2 - x1;
         double dy = y2 - y1;
 
+        //二点の位置が重なっている場合、タップした点と重なった点の距離を計算
         if (dx == 0 && dy == 0) {
             double diffX = px - x1;
             double diffY = py - y1;
             return Math.sqrt(diffX * diffX + diffY * diffY);
         }
 
+        /**
+         * 線分で最も(px,py)に近い点がその線分のどのあたりにあるかを表すtを求める式
+         * (px - x1) * dx + (py - y1) * dy : 内積を使って、点Pを線の方向に投影する
+         * ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy) : 投影したものを線分上での割合に変換する
+         */
         double t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
 
         if (t < 0) {
@@ -1491,15 +1522,17 @@ public class MainActivity extends AppCompatActivity {
 
     //コメントを追加する関数
     private void showMemoInputDialogForEditingRoad() {
-        EditText editText = new EditText(this);
-        editText.setHint("例：道が狭い、車が多い、夜暗い など");
+        EditText editText = new EditText(this);//文字を入力する場所を作成
+        editText.setHint("例：道が狭い、車が多い、夜暗い など");//テキストボックスに文字を入れる
         editText.setMinLines(3);
         editText.setSingleLine(false);
 
+        //編集時に、選択した線がメモを持っているのならば、それをテキストボックス内に入れる。
         if (editingRoad != null && editingRoad.memo != null) {
             editText.setText(editingRoad.memo);
         }
 
+        //ダイアログを作成
         new AlertDialog.Builder(this)
                 .setTitle("コメントを入力")
                 .setMessage("この色分け線にコメントを残せます。")
