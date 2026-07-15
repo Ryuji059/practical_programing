@@ -557,4 +557,135 @@
         </FrameLayout>
     </LinearLayout>
 
+    <!-- 統計画面 -->
+    <LinearLayout
+        android:id="@+id/statisticsLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="#FFFFFF">
+
+        <!-- 上部タイトルバー -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="#5C6BC0">
+
+            <TextView
+                android:id="@+id/btnStatisticsMenu"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="≡"
+                android:textSize="30sp"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="統計"
+                android:textSize="22sp"
+                android:textColor="#FFFFFF" />
+
+        </RelativeLayout>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="【累計】"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/statTotalRideCount"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="総走行回数: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statTotalDistance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="総走行距離: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statTotalRideTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="総走行時間: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statTotalMovingTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="総移動時間: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statTotalStopTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="総停止時間: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="【最高記録】"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:id="@+id/statMaxDistance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最長1回走行距離: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statMaxRideTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最長1回走行時間: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statMaxAverageSpeed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最高平均速度: -"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/statMaxGpsSpeed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="最高GPS速度: -"
+                    android:textSize="18sp" />
+
+            </LinearLayout>
+
+        </ScrollView>
+
+    </LinearLayout>
+
 </FrameLayout>

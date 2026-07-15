@@ -138,6 +138,21 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<GeoPoint> liveRouteGeoPoints = new ArrayList<>();//記録点の格納リスト
     private View topBar;//トップバー
     private TextView btnMainMenu;//ハンバーガーメニューボタン
+    //統計用の変数
+    private View statisticsLayout;
+
+    private TextView statTotalRideCount;
+    private TextView statTotalDistance;
+    private TextView statTotalRideTime;
+    private TextView statTotalMovingTime;
+    private TextView statTotalStopTime;
+
+    private TextView statMaxDistance;
+    private TextView statMaxRideTime;
+    private TextView statMaxAverageSpeed;
+    private TextView statMaxGpsSpeed;
+
+    private TextView btnStatisticsMenu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -527,6 +542,27 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        //統計関連のID取得
+        statisticsLayout = findViewById(R.id.statisticsLayout);
+
+        statTotalRideCount = findViewById(R.id.statTotalRideCount);
+        statTotalDistance = findViewById(R.id.statTotalDistance);
+        statTotalRideTime = findViewById(R.id.statTotalRideTime);
+        statTotalMovingTime = findViewById(R.id.statTotalMovingTime);
+        statTotalStopTime = findViewById(R.id.statTotalStopTime);
+
+        statMaxDistance = findViewById(R.id.statMaxDistance);
+        statMaxRideTime = findViewById(R.id.statMaxRideTime);
+        statMaxAverageSpeed = findViewById(R.id.statMaxAverageSpeed);
+        statMaxGpsSpeed = findViewById(R.id.statMaxGpsSpeed);
+
+        btnStatisticsMenu = findViewById(R.id.btnStatisticsMenu);
+
+        //統計関連用のボタンの実装
+        btnStatisticsMenu.setOnClickListener(v -> {
+            showMainMenu(btnStatisticsMenu);
+        });
+
         //Receiverの作成
         trackingReceiver = new BroadcastReceiver() {
             @Override
@@ -839,6 +875,7 @@ public class MainActivity extends AppCompatActivity {
         mapLayout.setVisibility(View.GONE);
         historyLayout.setVisibility(View.GONE);
         historyDetailLayout.setVisibility(View.GONE);
+        statisticsLayout.setVisibility(View.GONE);
 
         if (mode == AppMode.HISTORY) {//履歴モードの場合
             historyLayout.setVisibility(View.VISIBLE);//履歴用のレイアウトを表示
@@ -853,6 +890,12 @@ public class MainActivity extends AppCompatActivity {
             //詳細パネルを閉じた状態に
             routeDetailPanel.setTranslationY(dp(390));
             detailPanelOpen = false;
+            return;
+        }
+
+        if (mode == AppMode.STATISTICS) {
+            statisticsLayout.setVisibility(View.VISIBLE);
+            loadStatistics();
             return;
         }
 
@@ -2122,7 +2165,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (title.equals("統計")) {
-                Toast.makeText(this, "統計画面は今後実装します", Toast.LENGTH_SHORT).show();
+                changeMode(AppMode.STATISTICS);
                 return true;
             }
 
@@ -2140,5 +2183,142 @@ public class MainActivity extends AppCompatActivity {
         });
 
         popupMenu.show();
+    }
+
+    //統計データの読み込み関数
+    private void loadStatistics() {
+        try {
+            File file = new File(getFilesDir(), "statistics.json");
+
+            if (!file.exists()) {
+                statTotalRideCount.setText("総走行回数: 0回");
+                statTotalDistance.setText("総走行距離: 0.00 km");
+                statTotalRideTime.setText("総走行時間: 0時間0分");
+                statTotalMovingTime.setText("総移動時間: 0時間0分");
+                statTotalStopTime.setText("総停止時間: 0時間0分");
+
+                statMaxDistance.setText("最長1回走行距離: 0.00 km");
+                statMaxRideTime.setText("最長1回走行時間: 0時間0分");
+                statMaxAverageSpeed.setText("最高平均速度: 0.0 km/h");
+                statMaxGpsSpeed.setText("最高GPS速度: 0.0 km/h");
+
+                return;
+            }
+
+            String jsonText = readTextFile(file);
+            JSONObject rootJson = new JSONObject(jsonText);
+
+            JSONObject summaryJson =
+                    rootJson.optJSONObject("summary");
+
+            JSONObject recordsJson =
+                    rootJson.optJSONObject("records");
+
+            if (summaryJson == null || recordsJson == null) {
+                Toast.makeText(this, "統計データの形式が正しくありません", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            int totalRideCount =
+                    summaryJson.optInt("totalRideCount", 0);
+
+            double totalDistance =
+                    summaryJson.optDouble("totalDistance", 0.0);
+
+            long totalRideTime =
+                    summaryJson.optLong("totalRideTime", 0);
+
+            double totalMovingTime =
+                    summaryJson.optDouble("totalMovingTime", 0.0);
+
+            double totalStopTime =
+                    summaryJson.optDouble("totalStopTime", 0.0);
+
+            double maxSingleRideDistance =
+                    recordsJson.optDouble("maxSingleRideDistance", 0.0);
+
+            long maxSingleRideTime =
+                    recordsJson.optLong("maxSingleRideTime", 0);
+
+            double maxAverageSpeed =
+                    recordsJson.optDouble("maxAverageSpeed", 0.0);
+
+            double maxGpsSpeed =
+                    recordsJson.optDouble("maxGpsSpeed", 0.0);
+
+            statTotalRideCount.setText(
+                    "総走行回数: " + totalRideCount + "回"
+            );
+
+            statTotalDistance.setText(String.format(
+                    Locale.JAPAN,
+                    "総走行距離: %.2f km",
+                    totalDistance / 1000.0
+            ));
+
+            statTotalRideTime.setText(
+                    "総走行時間: " + formatStatisticsTime(totalRideTime)
+            );
+
+            statTotalMovingTime.setText(
+                    "総移動時間: " + formatStatisticsTime((long) totalMovingTime)
+            );
+
+            statTotalStopTime.setText(
+                    "総停止時間: " + formatStatisticsTime((long) totalStopTime)
+            );
+
+            statMaxDistance.setText(String.format(
+                    Locale.JAPAN,
+                    "最長1回走行距離: %.2f km",
+                    maxSingleRideDistance / 1000.0
+            ));
+
+            statMaxRideTime.setText(
+                    "最長1回走行時間: " + formatStatisticsTime(maxSingleRideTime)
+            );
+
+            statMaxAverageSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "最高平均速度: %.1f km/h",
+                    maxAverageSpeed * 3.6
+            ));
+
+            statMaxGpsSpeed.setText(String.format(
+                    Locale.JAPAN,
+                    "最高GPS速度: %.1f km/h",
+                    maxGpsSpeed * 3.6
+            ));
+
+            Log.d("STATISTICS", "統計画面の読み込み成功");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "統計データの読み込みに失敗しました", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    //時間表示用関数
+    private String formatStatisticsTime(long totalSec) {
+        long hours = totalSec / 3600;
+        long minutes = (totalSec % 3600) / 60;
+        long seconds = totalSec % 60;
+
+        if (hours > 0) {
+            return String.format(
+                    Locale.JAPAN,
+                    "%d時間%02d分%02d秒",
+                    hours,
+                    minutes,
+                    seconds
+            );
+        }
+
+        return String.format(
+                Locale.JAPAN,
+                "%d分%02d秒",
+                minutes,
+                seconds
+        );
     }
 }
