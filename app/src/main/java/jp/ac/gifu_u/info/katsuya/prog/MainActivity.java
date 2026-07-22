@@ -193,6 +193,9 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<String> statisticsPeriodKeys = new ArrayList<>();
 
     private boolean isUpdatingStatisticsSpinner = false;
+    //グラフ表示用
+    private DistanceBarChartView statDistanceChart;
+    private TextView statDistanceChartTitle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -618,6 +621,7 @@ public class MainActivity extends AppCompatActivity {
         statDistance20to50 = findViewById(R.id.statDistance20to50);
         statDistance50Over = findViewById(R.id.statDistance50Over);
 
+        //表示期間変更用
         spinnerStatisticsType =
                 findViewById(R.id.spinnerStatisticsType);
 
@@ -626,6 +630,13 @@ public class MainActivity extends AppCompatActivity {
 
         statSelectedPeriod =
                 findViewById(R.id.statSelectedPeriod);
+
+        //走行距離のグラフ用
+        statDistanceChart =
+                findViewById(R.id.statDistanceChart);
+
+        statDistanceChartTitle =
+                findViewById(R.id.statDistanceChartTitle);
 
         //統計関連用のボタンの実装
         btnStatisticsMenu.setOnClickListener(v -> {
@@ -2773,6 +2784,11 @@ public class MainActivity extends AppCompatActivity {
         );
 
         showStatisticsBlock(statisticsBlock);
+        //グラフの更新
+        updateDistanceChart(
+                selectedType,
+                periodKey
+        );
     }
 
     //一週間分の統計データを計算
@@ -3360,5 +3376,375 @@ public class MainActivity extends AppCompatActivity {
         statDistance10to20.setText("10～20 km: 0回");
         statDistance20to50.setText("20～50 km: 0回");
         statDistance50Over.setText("50 km以上: 0回");
+
+        if (statDistanceChart != null) {
+            statDistanceChart.clearData();
+        }
+
+        if (statDistanceChartTitle != null) {
+            statDistanceChartTitle.setText(
+                    "走行距離グラフ"
+            );
+        }
+    }
+
+    //グラフの更新関数
+    private void updateDistanceChart(
+            String selectedType,
+            String periodKey
+    ) {
+        if (currentStatisticsRoot == null) {
+            statDistanceChart.clearData();
+            return;
+        }
+
+        if (selectedType.equals("全体")) {
+            showYearlyDistanceChart();
+
+        } else if (selectedType.equals("年")) {
+            showMonthlyDistanceChart(periodKey);
+
+        } else if (selectedType.equals("月")) {
+            showWeeklyDistanceChart(periodKey);
+
+        } else if (selectedType.equals("週")) {
+            showDailyDistanceChart(periodKey);
+        }
+    }
+
+    //それぞれの期間のグラフ用時間数
+    //年ごとの走行距離グラフ
+    private void showYearlyDistanceChart() {
+        ArrayList<String> labels = new ArrayList<>();
+        ArrayList<Double> values = new ArrayList<>();
+
+        JSONObject yearlyJson =
+                currentStatisticsRoot.optJSONObject("yearly");
+
+        if (yearlyJson == null) {
+            statDistanceChart.clearData();
+            return;
+        }
+
+        ArrayList<String> yearKeys =
+                getSortedJsonKeysAscending(yearlyJson);
+
+        for (String yearKey : yearKeys) {
+            JSONObject block =
+                    yearlyJson.optJSONObject(yearKey);
+
+            if (block == null) {
+                continue;
+            }
+
+            labels.add(yearKey);
+
+            values.add(
+                    getStatisticsBlockDistanceKm(block)
+            );
+        }
+
+        statDistanceChartTitle.setText(
+                "年ごとの走行距離"
+        );
+
+        statDistanceChart.setData(
+                labels,
+                values
+        );
+    }
+
+    //選択年の月ごとの走行距離グラフ
+    private void showMonthlyDistanceChart(
+            String yearKey
+    ) {
+        ArrayList<String> labels = new ArrayList<>();
+        ArrayList<Double> values = new ArrayList<>();
+
+        JSONObject monthlyJson =
+                currentStatisticsRoot.optJSONObject("monthly");
+
+        for (int month = 1; month <= 12; month++) {
+            String monthKey =
+                    String.format(
+                            Locale.JAPAN,
+                            "%s-%02d",
+                            yearKey,
+                            month
+                    );
+
+            labels.add(month + "月");
+
+            double distanceKm = 0.0;
+
+            if (monthlyJson != null) {
+                JSONObject block =
+                        monthlyJson.optJSONObject(monthKey);
+
+                if (block != null) {
+                    distanceKm =
+                            getStatisticsBlockDistanceKm(block);
+                }
+            }
+
+            values.add(distanceKm);
+        }
+
+        statDistanceChartTitle.setText(
+                yearKey + "年の月ごとの走行距離"
+        );
+
+        statDistanceChart.setData(
+                labels,
+                values
+        );
+    }
+
+    //選択月の週ごとの走行距離グラフ
+    private void showWeeklyDistanceChart(
+            String monthKey
+    ) {
+        ArrayList<String> labels = new ArrayList<>();
+        ArrayList<Double> values = new ArrayList<>();
+
+        JSONObject dailyJson =
+                currentStatisticsRoot.optJSONObject("daily");
+
+        if (dailyJson == null) {
+            statDistanceChart.clearData();
+            return;
+        }
+
+        ArrayList<String> dayKeys =
+                getSortedJsonKeysAscending(dailyJson);
+
+        ArrayList<String> weekStartKeys =
+                new ArrayList<>();
+
+        ArrayList<Double> weekDistances =
+                new ArrayList<>();
+
+        for (String dayKey : dayKeys) {
+            /*
+             * 選択した月の日付だけを対象にする
+             */
+            if (!dayKey.startsWith(monthKey + "-")) {
+                continue;
+            }
+
+            String weekStartKey =
+                    getWeekStartKey(dayKey);
+
+            if (weekStartKey == null) {
+                continue;
+            }
+
+            JSONObject dayBlock =
+                    dailyJson.optJSONObject(dayKey);
+
+            double distanceKm =
+                    getStatisticsBlockDistanceKm(dayBlock);
+
+            int weekIndex =
+                    weekStartKeys.indexOf(weekStartKey);
+
+            if (weekIndex == -1) {
+                weekStartKeys.add(weekStartKey);
+                weekDistances.add(distanceKm);
+
+            } else {
+                weekDistances.set(
+                        weekIndex,
+                        weekDistances.get(weekIndex)
+                                + distanceKm
+                );
+            }
+        }
+
+        for (int i = 0; i < weekStartKeys.size(); i++) {
+            String weekStart =
+                    weekStartKeys.get(i);
+
+            String weekEnd =
+                    addDaysToDateKey(
+                            weekStart,
+                            6
+                    );
+
+            labels.add(
+                    formatShortDateKey(weekStart)
+                            + "～"
+                            + formatShortDateKey(weekEnd)
+            );
+
+            values.add(
+                    weekDistances.get(i)
+            );
+        }
+
+        statDistanceChartTitle.setText(
+                formatMonthKeyForLabel(monthKey)
+                        + "の週ごとの走行距離"
+        );
+
+        statDistanceChart.setData(
+                labels,
+                values
+        );
+    }
+
+    //選択週の日ごとの走行距離グラフ
+    private void showDailyDistanceChart(
+            String weekStartKey
+    ) {
+        ArrayList<String> labels = new ArrayList<>();
+        ArrayList<Double> values = new ArrayList<>();
+
+        JSONObject dailyJson =
+                currentStatisticsRoot.optJSONObject("daily");
+
+        String[] dayNames = {
+                "月",
+                "火",
+                "水",
+                "木",
+                "金",
+                "土",
+                "日"
+        };
+
+        for (int i = 0; i < 7; i++) {
+            String dayKey =
+                    addDaysToDateKey(
+                            weekStartKey,
+                            i
+                    );
+
+            labels.add(
+                    dayNames[i]
+                            + "\n"
+                            + formatShortDateKey(dayKey)
+            );
+
+            double distanceKm = 0.0;
+
+            if (dailyJson != null) {
+                JSONObject dayBlock =
+                        dailyJson.optJSONObject(dayKey);
+
+                if (dayBlock != null) {
+                    distanceKm =
+                            getStatisticsBlockDistanceKm(dayBlock);
+                }
+            }
+
+            values.add(distanceKm);
+        }
+
+        String weekEndKey =
+                addDaysToDateKey(
+                        weekStartKey,
+                        6
+                );
+
+        statDistanceChartTitle.setText(
+                formatDateKeyForLabel(weekStartKey)
+                        + "～"
+                        + formatDateKeyForLabel(weekEndKey)
+                        + "の日ごとの走行距離"
+        );
+
+        statDistanceChart.setData(
+                labels,
+                values
+        );
+    }
+
+    //統計ブロックから距離を取得する関数
+    private double getStatisticsBlockDistanceKm(
+            JSONObject statisticsBlock
+    ) {
+        if (statisticsBlock == null) {
+            return 0.0;
+        }
+
+        JSONObject summaryJson =
+                statisticsBlock.optJSONObject("summary");
+
+        if (summaryJson == null) {
+            return 0.0;
+        }
+
+        double distanceMeter =
+                summaryJson.optDouble(
+                        "totalDistance",
+                        0.0
+                );
+
+        return distanceMeter / 1000.0;
+    }
+
+    //グラフ用に古い順でキーを取得するための関数
+    private ArrayList<String> getSortedJsonKeysAscending(
+            JSONObject jsonObject
+    ) {
+        ArrayList<String> keys =
+                new ArrayList<>();
+
+        if (jsonObject == null) {
+            return keys;
+        }
+
+        Iterator<String> iterator =
+                jsonObject.keys();
+
+        while (iterator.hasNext()) {
+            keys.add(iterator.next());
+        }
+
+        Collections.sort(keys);
+
+        return keys;
+    }
+
+    //日付・月の表示用関数
+    private String formatShortDateKey(
+            String dayKey
+    ) {
+        try {
+            Date date =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    ).parse(dayKey);
+
+            return new SimpleDateFormat(
+                    "M/d",
+                    Locale.JAPAN
+            ).format(date);
+
+        } catch (Exception e) {
+            return dayKey;
+        }
+    }
+
+    private String formatMonthKeyForLabel(
+            String monthKey
+    ) {
+        try {
+            Date date =
+                    new SimpleDateFormat(
+                            "yyyy-MM",
+                            Locale.JAPAN
+                    ).parse(monthKey);
+
+            return new SimpleDateFormat(
+                    "yyyy年M月",
+                    Locale.JAPAN
+            ).format(date);
+
+        } catch (Exception e) {
+            return monthKey;
+        }
     }
 }
