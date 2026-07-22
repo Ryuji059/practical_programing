@@ -907,4 +907,98 @@
 
     </LinearLayout>
 
+    <!-- メンテナンス画面 -->
+    <LinearLayout
+        android:id="@+id/maintenanceLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="#FFFFFF">
+
+        <!-- 上部タイトルバー -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="#00897B">
+
+            <TextView
+                android:id="@+id/btnMaintenanceMenu"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="≡"
+                android:textSize="30sp"
+                android:textColor="#FFFFFF" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="メンテナンス"
+                android:textSize="22sp"
+                android:textColor="#FFFFFF" />
+
+        </RelativeLayout>
+
+        <!-- カレンダー -->
+        <CalendarView
+            android:id="@+id/maintenanceCalendar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:firstDayOfWeek="2"
+            android:showWeekNumber="false"
+            android:background="#FFFFFF"
+            android:theme="@style/MaintenanceCalendarTheme"
+            android:dateTextAppearance="@style/MaintenanceCalendarDateText"
+            android:weekDayTextAppearance="@style/MaintenanceCalendarWeekText" />
+        <!-- 選択中の日付 -->
+        <TextView
+            android:id="@+id/maintenanceSelectedDate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="8dp"
+            android:text="選択日: -"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="【この日のメンテナンス】"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000" />
+
+        <!-- 選択日の記録一覧 -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/maintenanceList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp" />
+
+        </ScrollView>
+
+        <!-- 追加ボタン -->
+        <Button
+            android:id="@+id/btnAddMaintenance"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_margin="12dp"
+            android:text="メンテナンス記録を追加" />
+
+    </LinearLayout>
+
 </FrameLayout>
