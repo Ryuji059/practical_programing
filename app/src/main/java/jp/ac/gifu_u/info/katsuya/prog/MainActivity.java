@@ -68,6 +68,27 @@ public class MainActivity extends AppCompatActivity {
         MAINTENANCE,    //メンテナンス記録
         SETTINGS        //設定
     }
+    /**
+     * 履歴一覧で使用する1件分のデータ
+     */
+    private static class HistoryItem {
+        File file;
+        long startTime;
+        long endTime;
+        double distance;
+
+        HistoryItem(
+                File file,
+                long startTime,
+                long endTime,
+                double distance
+        ) {
+            this.file = file;
+            this.startTime = startTime;
+            this.endTime = endTime;
+            this.distance = distance;
+        }
+    }
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
     private Marker currentMarker;//現在位置のピン
@@ -86,6 +107,9 @@ public class MainActivity extends AppCompatActivity {
     private View roadEditPanel;//色分けのパネル
     private TextView titleBar;//画面上部のタイトルバー
     private LinearLayout historyList;//走行履歴の表示用リスト
+    // 履歴のフィルター・並び替え
+    private Spinner spinnerHistoryPeriod;
+    private Spinner spinnerHistorySort;
     private MapView historyMap;//走行履歴のルート表示用のMAP
     private View historyDetailLayout;//走行データの詳細表示用のレイアウト
     private Polyline historyRouteLine;//走行履歴のルートの線
@@ -236,6 +260,11 @@ public class MainActivity extends AppCompatActivity {
         roadEditPanel = findViewById(R.id.roadEditPanel);
         titleBar = findViewById(R.id.titleBar);
         historyList = findViewById(R.id.historyList);
+        spinnerHistoryPeriod =
+                findViewById(R.id.spinnerHistoryPeriod);
+
+        spinnerHistorySort =
+                findViewById(R.id.spinnerHistorySort);
         //走行経路表示用のMAPの初期化
         historyDetailLayout = findViewById(R.id.historyDetailLayout);
 
@@ -390,6 +419,89 @@ public class MainActivity extends AppCompatActivity {
             changeMode(AppMode.MAP);
         });
         btnBackHistory.setOnClickListener(v -> changeMode(AppMode.HISTORY));
+
+        // =========================
+        // 履歴期間フィルター
+        // =========================
+        ArrayList<String> historyPeriodItems =
+                new ArrayList<>();
+
+        historyPeriodItems.add("すべての期間");
+        historyPeriodItems.add("今週");
+        historyPeriodItems.add("今月");
+        historyPeriodItems.add("今年");
+
+        ArrayAdapter<String> historyPeriodAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        historyPeriodItems
+                );
+
+        historyPeriodAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinnerHistoryPeriod.setAdapter(
+                historyPeriodAdapter
+        );
+
+        // =========================
+        // 履歴並び替え
+        // =========================
+        ArrayList<String> historySortItems =
+                new ArrayList<>();
+
+        historySortItems.add("新しい順");
+        historySortItems.add("古い順");
+        historySortItems.add("距離が長い順");
+        historySortItems.add("距離が短い順");
+
+        ArrayAdapter<String> historySortAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        historySortItems
+                );
+
+        historySortAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinnerHistorySort.setAdapter(
+                historySortAdapter
+        );
+
+        // 選択変更時に履歴を再表示
+        AdapterView.OnItemSelectedListener historyFilterListener =
+                new AdapterView.OnItemSelectedListener() {
+
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+                        if (currentMode == AppMode.HISTORY) {
+                            loadHistoryList();
+                        }
+                    }
+
+                    @Override
+                    public void onNothingSelected(
+                            AdapterView<?> parent
+                    ) {
+                    }
+                };
+
+        spinnerHistoryPeriod.setOnItemSelectedListener(
+                historyFilterListener
+        );
+
+        spinnerHistorySort.setOnItemSelectedListener(
+                historyFilterListener
+        );
 
 
         //現在地を画面の中心に持ってくるボタン
@@ -1068,139 +1180,465 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadHistoryList() {
-        historyList.removeAllViews();//リストの初期化
+        // 前回表示した履歴を削除
+        historyList.removeAllViews();
 
-        File routeDir = new File(getFilesDir(), "routes");//ディレクトリの読み込み
+        File routeDir =
+                new File(getFilesDir(), "routes");
 
-        if (!routeDir.exists()) {//ない場合は「保存された走行履歴はありません」と表示
-            TextView emptyText = new TextView(this);
-            emptyText.setText("保存された走行履歴はありません");
-            emptyText.setTextSize(18);
-            historyList.addView(emptyText);
+        if (!routeDir.exists()) {
+            showEmptyHistoryMessage(
+                    "保存された走行履歴はありません"
+            );
             return;
         }
 
-        File[] files = routeDir.listFiles();//ディレクトリ内のファイルを読み込み
+        File[] files =
+                routeDir.listFiles();
 
-        if (files == null || files.length == 0) {//ない場合は「保存された走行履歴はありません」と表示
-            TextView emptyText = new TextView(this);
-            emptyText.setText("保存された走行履歴はありません");
-            emptyText.setTextSize(18);
-            historyList.addView(emptyText);
+        if (files == null || files.length == 0) {
+            showEmptyHistoryMessage(
+                    "保存された走行履歴はありません"
+            );
             return;
         }
+
+        /*
+         * JSONファイルを読み込み、
+         * HistoryItemの一覧に変換する
+         */
+        ArrayList<HistoryItem> historyItems =
+                new ArrayList<>();
 
         for (File file : files) {
-            if (!file.getName().endsWith(".json")) {//ファイルの拡張子が.json出ない場合はスキップ
+            if (!file.getName().endsWith(".json")) {
                 continue;
             }
 
-            try {//ファイルの中身を見る
-                String jsonText = readTextFile(file);
-                JSONObject json = new JSONObject(jsonText);
-                //見出しに使う譲歩を取得
-                long start = json.getLong("startTime");//記録開始時刻
-                long end = json.getLong("endTime");//記録終了時刻
-                double distance = json.getDouble("totalDistance");//走行距離
+            try {
+                String jsonText =
+                        readTextFile(file);
 
-                String dateText = new SimpleDateFormat(
-                        "yyyy/MM/dd HH:mm",
-                        Locale.JAPAN
-                ).format(new Date(start));
+                JSONObject json =
+                        new JSONObject(jsonText);
 
-                long sec = (end - start) / 1000;
-                long min = sec / 60;
-                long remainSec = sec % 60;
+                long start =
+                        json.optLong(
+                                "startTime",
+                                0
+                        );
 
-                String distanceText = String.format(
-                        Locale.JAPAN,
-                        "%.2f km",
-                        distance / 1000.0
+                long end =
+                        json.optLong(
+                                "endTime",
+                                0
+                        );
+
+                double distance =
+                        json.optDouble(
+                                "totalDistance",
+                                0.0
+                        );
+
+                historyItems.add(
+                        new HistoryItem(
+                                file,
+                                start,
+                                end,
+                                distance
+                        )
                 );
 
-                String timeText = String.format(
-                        Locale.JAPAN,
-                        "%02d:%02d",
-                        min,
-                        remainSec
+            } catch (Exception e) {
+                Log.e(
+                        "HISTORY",
+                        "履歴ファイルの読み込みに失敗: "
+                                + file.getName(),
+                        e
                 );
-                // 履歴1件分の横並びレイアウトを作成
-                LinearLayout rowLayout = new LinearLayout(this);
-                rowLayout.setOrientation(LinearLayout.HORIZONTAL);
-
-                // 行同士の間隔
-                LinearLayout.LayoutParams rowParams =
-                        new LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                dpInt(64)
-                        );
-                rowParams.setMargins(0, dpInt(8), 0, 0);
-                rowLayout.setLayoutParams(rowParams);
-
-                // 左側：履歴表示部分
-                TextView historyView = new TextView(this);
-                historyView.setText(
-                        dateText + "\n" +
-                                distanceText + "\n" +
-                                timeText
-                );
-                historyView.setTextSize(14);
-                historyView.setGravity(android.view.Gravity.CENTER);
-                historyView.setTextColor(Color.BLACK);
-                historyView.setBackgroundColor(Color.rgb(220, 220, 220));
-                historyView.setPadding(0, 0, 0, 0);
-                historyView.setIncludeFontPadding(false);
-
-                // 履歴欄を横幅いっぱいに広げる
-                LinearLayout.LayoutParams historyParams =
-                        new LinearLayout.LayoutParams(
-                                0,
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                1.0f
-                        );
-                historyView.setLayoutParams(historyParams);
-
-                // 履歴欄を押したら詳細画面へ
-                historyView.setOnClickListener(v -> {
-                    loadRouteOnHistoryMap(file);
-                    changeMode(AppMode.HISTORY_DETAIL);
-                });
-
-                // 右側：︙メニューボタン
-                TextView menuButton = new TextView(this);
-                menuButton.setText("︙");
-                menuButton.setTextSize(28);
-                menuButton.setGravity(android.view.Gravity.CENTER);
-                menuButton.setTextColor(Color.BLACK);
-                menuButton.setBackgroundColor(Color.rgb(220, 220, 220));
-                menuButton.setPadding(0, 0, 0, 0);
-                menuButton.setIncludeFontPadding(false);
-
-                // ︙ボタンの幅と高さ
-                LinearLayout.LayoutParams menuParams =
-                        new LinearLayout.LayoutParams(
-                                dpInt(48),
-                                LinearLayout.LayoutParams.MATCH_PARENT
-                        );
-                menuParams.setMargins(dpInt(8), 0, 0, 0);
-                menuButton.setLayoutParams(menuParams);
-
-                // ︙を押したらメニュー表示
-                menuButton.setOnClickListener(v -> {
-                    showHistoryPopupMenu(menuButton, file);
-                });
-
-                // 横並びに追加
-                rowLayout.addView(historyView);
-                rowLayout.addView(menuButton);
-
-                // 履歴一覧に追加
-                historyList.addView(rowLayout);
-
-            } catch (Exception e) {//エラー処理
-                e.printStackTrace();
             }
         }
+
+        /*
+         * 選択中の期間フィルターを取得
+         */
+        String selectedPeriod =
+                "すべての期間";
+
+        if (spinnerHistoryPeriod != null
+                && spinnerHistoryPeriod.getSelectedItem() != null) {
+
+            selectedPeriod =
+                    spinnerHistoryPeriod
+                            .getSelectedItem()
+                            .toString();
+        }
+
+        /*
+         * 期間条件に一致するものだけ残す
+         */
+        ArrayList<HistoryItem> filteredItems =
+                new ArrayList<>();
+
+        for (HistoryItem item : historyItems) {
+            if (matchesHistoryPeriod(
+                    item.startTime,
+                    selectedPeriod
+            )) {
+                filteredItems.add(item);
+            }
+        }
+
+        /*
+         * 選択中の並び順を取得
+         */
+        String selectedSort =
+                "新しい順";
+
+        if (spinnerHistorySort != null
+                && spinnerHistorySort.getSelectedItem() != null) {
+
+            selectedSort =
+                    spinnerHistorySort
+                            .getSelectedItem()
+                            .toString();
+        }
+
+        sortHistoryItems(
+                filteredItems,
+                selectedSort
+        );
+
+        if (filteredItems.isEmpty()) {
+            showEmptyHistoryMessage(
+                    "条件に一致する走行履歴はありません"
+            );
+            return;
+        }
+
+        /*
+         * フィルター・並び替え後の履歴を表示
+         */
+        for (HistoryItem item : filteredItems) {
+            File file = item.file;
+            long start = item.startTime;
+            long end = item.endTime;
+            double distance = item.distance;
+
+            String dateText =
+                    new SimpleDateFormat(
+                            "yyyy/MM/dd HH:mm",
+                            Locale.JAPAN
+                    ).format(new Date(start));
+
+            long sec =
+                    Math.max(
+                            0,
+                            (end - start) / 1000
+                    );
+
+            long hours = sec / 3600;
+            long minutes = (sec % 3600) / 60;
+            long remainSec = sec % 60;
+
+            String distanceText =
+                    String.format(
+                            Locale.JAPAN,
+                            "%.2f km",
+                            distance / 1000.0
+                    );
+
+            String timeText;
+
+            if (hours > 0) {
+                timeText =
+                        String.format(
+                                Locale.JAPAN,
+                                "%d:%02d:%02d",
+                                hours,
+                                minutes,
+                                remainSec
+                        );
+            } else {
+                timeText =
+                        String.format(
+                                Locale.JAPAN,
+                                "%02d:%02d",
+                                minutes,
+                                remainSec
+                        );
+            }
+
+            // 履歴1件分の横並びレイアウト
+            LinearLayout rowLayout =
+                    new LinearLayout(this);
+
+            rowLayout.setOrientation(
+                    LinearLayout.HORIZONTAL
+            );
+
+            LinearLayout.LayoutParams rowParams =
+                    new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            dpInt(64)
+                    );
+
+            rowParams.setMargins(
+                    0,
+                    dpInt(8),
+                    0,
+                    0
+            );
+
+            rowLayout.setLayoutParams(rowParams);
+
+            // 左側：履歴情報
+            TextView historyView =
+                    new TextView(this);
+
+            historyView.setText(
+                    dateText + "\n"
+                            + distanceText + "\n"
+                            + timeText
+            );
+
+            historyView.setTextSize(14);
+            historyView.setGravity(
+                    android.view.Gravity.CENTER
+            );
+            historyView.setTextColor(Color.BLACK);
+            historyView.setBackgroundColor(
+                    Color.rgb(220, 220, 220)
+            );
+            historyView.setPadding(0, 0, 0, 0);
+            historyView.setIncludeFontPadding(false);
+
+            LinearLayout.LayoutParams historyParams =
+                    new LinearLayout.LayoutParams(
+                            0,
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            1.0f
+                    );
+
+            historyView.setLayoutParams(
+                    historyParams
+            );
+
+            // 押したら履歴詳細を表示
+            historyView.setOnClickListener(v -> {
+                loadRouteOnHistoryMap(file);
+                changeMode(AppMode.HISTORY_DETAIL);
+            });
+
+            // 右側：メニューボタン
+            TextView menuButton =
+                    new TextView(this);
+
+            menuButton.setText("︙");
+            menuButton.setTextSize(28);
+            menuButton.setGravity(
+                    android.view.Gravity.CENTER
+            );
+            menuButton.setTextColor(Color.BLACK);
+            menuButton.setBackgroundColor(
+                    Color.rgb(220, 220, 220)
+            );
+            menuButton.setPadding(0, 0, 0, 0);
+            menuButton.setIncludeFontPadding(false);
+
+            LinearLayout.LayoutParams menuParams =
+                    new LinearLayout.LayoutParams(
+                            dpInt(48),
+                            LinearLayout.LayoutParams.MATCH_PARENT
+                    );
+
+            menuParams.setMargins(
+                    dpInt(8),
+                    0,
+                    0,
+                    0
+            );
+
+            menuButton.setLayoutParams(
+                    menuParams
+            );
+
+            menuButton.setOnClickListener(v -> {
+                showHistoryPopupMenu(
+                        menuButton,
+                        file
+                );
+            });
+
+            rowLayout.addView(historyView);
+            rowLayout.addView(menuButton);
+
+            historyList.addView(rowLayout);
+        }
+    }
+
+    /**
+     * 指定した履歴が選択中の期間に含まれるかを判定
+     */
+    private boolean matchesHistoryPeriod(
+            long startTime,
+            String selectedPeriod
+    ) {
+        if (selectedPeriod.equals("すべての期間")) {
+            return true;
+        }
+
+        Calendar rideCalendar =
+                Calendar.getInstance(
+                        Locale.JAPAN
+                );
+
+        rideCalendar.setTimeInMillis(
+                startTime
+        );
+
+        Calendar nowCalendar =
+                Calendar.getInstance(
+                        Locale.JAPAN
+                );
+
+        if (selectedPeriod.equals("今年")) {
+            return rideCalendar.get(Calendar.YEAR)
+                    == nowCalendar.get(Calendar.YEAR);
+        }
+
+        if (selectedPeriod.equals("今月")) {
+            return rideCalendar.get(Calendar.YEAR)
+                    == nowCalendar.get(Calendar.YEAR)
+                    && rideCalendar.get(Calendar.MONTH)
+                    == nowCalendar.get(Calendar.MONTH);
+        }
+
+        if (selectedPeriod.equals("今週")) {
+            Calendar weekStart =
+                    Calendar.getInstance(
+                            Locale.JAPAN
+                    );
+
+            int dayOfWeek =
+                    weekStart.get(
+                            Calendar.DAY_OF_WEEK
+                    );
+
+            // 月曜日から何日経過しているか
+            int daysFromMonday =
+                    (dayOfWeek + 5) % 7;
+
+            weekStart.add(
+                    Calendar.DAY_OF_MONTH,
+                    -daysFromMonday
+            );
+
+            weekStart.set(
+                    Calendar.HOUR_OF_DAY,
+                    0
+            );
+            weekStart.set(
+                    Calendar.MINUTE,
+                    0
+            );
+            weekStart.set(
+                    Calendar.SECOND,
+                    0
+            );
+            weekStart.set(
+                    Calendar.MILLISECOND,
+                    0
+            );
+
+            Calendar weekEnd =
+                    (Calendar) weekStart.clone();
+
+            weekEnd.add(
+                    Calendar.DAY_OF_MONTH,
+                    7
+            );
+
+            return startTime
+                    >= weekStart.getTimeInMillis()
+                    && startTime
+                    < weekEnd.getTimeInMillis();
+        }
+
+        return true;
+    }
+
+    /**
+     * 選択された方法で履歴を並び替える
+     */
+    private void sortHistoryItems(
+            ArrayList<HistoryItem> items,
+            String selectedSort
+    ) {
+        if (selectedSort.equals("古い順")) {
+            Collections.sort(
+                    items,
+                    (item1, item2) ->
+                            Long.compare(
+                                    item1.startTime,
+                                    item2.startTime
+                            )
+            );
+
+        } else if (selectedSort.equals("距離が長い順")) {
+            Collections.sort(
+                    items,
+                    (item1, item2) ->
+                            Double.compare(
+                                    item2.distance,
+                                    item1.distance
+                            )
+            );
+
+        } else if (selectedSort.equals("距離が短い順")) {
+            Collections.sort(
+                    items,
+                    (item1, item2) ->
+                            Double.compare(
+                                    item1.distance,
+                                    item2.distance
+                            )
+            );
+
+        } else {
+            // 初期値：新しい順
+            Collections.sort(
+                    items,
+                    (item1, item2) ->
+                            Long.compare(
+                                    item2.startTime,
+                                    item1.startTime
+                            )
+            );
+        }
+    }
+
+    /**
+     * 履歴がない場合のメッセージを表示
+     */
+    private void showEmptyHistoryMessage(
+            String message
+    ) {
+        TextView emptyText =
+                new TextView(this);
+
+        emptyText.setText(message);
+        emptyText.setTextSize(18);
+        emptyText.setTextColor(Color.DKGRAY);
+
+        emptyText.setPadding(
+                dpInt(12),
+                dpInt(24),
+                dpInt(12),
+                dpInt(24)
+        );
+
+        historyList.addView(emptyText);
     }
 
     //ファイルを読み込む関数
