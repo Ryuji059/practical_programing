@@ -49,6 +49,13 @@ import android.content.Context;
 import android.content.IntentFilter;
 import android.os.Build;
 import androidx.core.content.ContextCompat;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
+
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Iterator;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -138,6 +145,7 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<GeoPoint> liveRouteGeoPoints = new ArrayList<>();//記録点の格納リスト
     private View topBar;//トップバー
     private TextView btnMainMenu;//ハンバーガーメニューボタン
+
     //統計用の変数
     private View statisticsLayout;//統計用のレイアウト
 
@@ -171,6 +179,20 @@ public class MainActivity extends AppCompatActivity {
     private TextView statDistance10to20;
     private TextView statDistance20to50;
     private TextView statDistance50Over;
+    private Spinner spinnerStatisticsType;
+    private Spinner spinnerStatisticsPeriod;
+    private TextView statSelectedPeriod;
+
+    // statistics.json全体を一時保存
+    private JSONObject currentStatisticsRoot;
+
+    // 2番目のSpinnerに表示する名前
+    private ArrayList<String> statisticsPeriodLabels = new ArrayList<>();
+
+    // 実際にJSON検索に使うキー
+    private ArrayList<String> statisticsPeriodKeys = new ArrayList<>();
+
+    private boolean isUpdatingStatisticsSpinner = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -596,10 +618,85 @@ public class MainActivity extends AppCompatActivity {
         statDistance20to50 = findViewById(R.id.statDistance20to50);
         statDistance50Over = findViewById(R.id.statDistance50Over);
 
+        spinnerStatisticsType =
+                findViewById(R.id.spinnerStatisticsType);
+
+        spinnerStatisticsPeriod =
+                findViewById(R.id.spinnerStatisticsPeriod);
+
+        statSelectedPeriod =
+                findViewById(R.id.statSelectedPeriod);
+
         //統計関連用のボタンの実装
         btnStatisticsMenu.setOnClickListener(v -> {
             showMainMenu(btnStatisticsMenu);
         });
+
+        //統計用種類スピナーの初期化
+        ArrayList<String> typeList = new ArrayList<>();
+
+        typeList.add("全体");
+        typeList.add("年");
+        typeList.add("月");
+        typeList.add("週");
+
+        ArrayAdapter<String> typeAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        typeList
+                );
+
+        typeAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinnerStatisticsType.setAdapter(typeAdapter);
+
+        //スピナー選択時の処理
+        spinnerStatisticsType.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+                        if (isUpdatingStatisticsSpinner) {
+                            return;
+                        }
+
+                        updateStatisticsPeriodSpinner();
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                }
+        );
+
+        spinnerStatisticsPeriod.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+                        if (isUpdatingStatisticsSpinner) {
+                            return;
+                        }
+
+                        displaySelectedStatistics();
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                }
+        );
 
         //Receiverの作成
         trackingReceiver = new BroadcastReceiver() {
@@ -2226,73 +2323,770 @@ public class MainActivity extends AppCompatActivity {
     //統計データの読み込み関数
     private void loadStatistics() {
         try {
-            File file = new File(getFilesDir(), "statistics.json");
+            File file =
+                    new File(getFilesDir(), "statistics.json");
 
             if (!file.exists()) {
-                statTotalRideCount.setText("総走行回数: 0回");
-                statTotalDistance.setText("総走行距離: 0.00 km");
-                statTotalRideTime.setText("総走行時間: 0時間0分");
-                statTotalMovingTime.setText("総移動時間: 0時間0分");
-                statTotalStopTime.setText("総停止時間: 0時間0分");
+                currentStatisticsRoot = null;
 
-                statMaxDistance.setText("最長1回走行距離: 0.00 km");
-                statMaxRideTime.setText("最長1回走行時間: 0時間0分");
-                statMaxAverageSpeed.setText("最高平均速度: 0.0 km/h");
-                statMaxGpsSpeed.setText("最高GPS速度: 0.0 km/h");
+                statisticsPeriodLabels.clear();
+                statisticsPeriodKeys.clear();
 
-                statTotalStopCount.setText("累計停止回数: 0回");
+                statisticsPeriodLabels.add("データなし");
+                statisticsPeriodKeys.add("");
 
-                statMaxMovingAverageSpeed.setText(
-                        "最高移動中平均速度: 0.0 km/h"
+                ArrayAdapter<String> emptyAdapter =
+                        new ArrayAdapter<>(
+                                this,
+                                android.R.layout.simple_spinner_item,
+                                statisticsPeriodLabels
+                        );
+
+                emptyAdapter.setDropDownViewResource(
+                        android.R.layout.simple_spinner_dropdown_item
                 );
 
-                statLongestStopTime.setText(
-                        "最長停止時間: 0分00秒"
-                );
+                spinnerStatisticsPeriod.setAdapter(emptyAdapter);
 
-                statSpeed0to5.setText("0～5 km/h: 0.0%（0分00秒）");
-                statSpeed5to10.setText("5～10 km/h: 0.0%（0分00秒）");
-                statSpeed10to15.setText("10～15 km/h: 0.0%（0分00秒）");
-                statSpeed15to20.setText("15～20 km/h: 0.0%（0分00秒）");
-                statSpeed20to25.setText("20～25 km/h: 0.0%（0分00秒）");
-                statSpeed25to30.setText("25～30 km/h: 0.0%（0分00秒）");
-                statSpeed30Over.setText("30 km/h以上: 0.0%（0分00秒）");
+                statSelectedPeriod.setText("データなし");
 
-                statDistance0to5.setText("0～5 km: 0回");
-                statDistance5to10.setText("5～10 km: 0回");
-                statDistance10to20.setText("10～20 km: 0回");
-                statDistance20to50.setText("20～50 km: 0回");
-                statDistance50Over.setText("50 km以上: 0回");
-
+                showEmptyStatistics();
                 return;
             }
 
             String jsonText = readTextFile(file);
-            JSONObject rootJson = new JSONObject(jsonText);
 
+            currentStatisticsRoot =
+                    new JSONObject(jsonText);
+
+            updateStatisticsPeriodSpinner();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+
+            Toast.makeText(
+                    this,
+                    "統計データの読み込みに失敗しました",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            showEmptyStatistics();
+        }
+    }
+
+    //時間表示用関数
+    private String formatStatisticsTime(long totalSec) {
+        long hours = totalSec / 3600;
+        long minutes = (totalSec % 3600) / 60;
+        long seconds = totalSec % 60;
+
+        if (hours > 0) {
+            return String.format(
+                    Locale.JAPAN,
+                    "%d時間%02d分%02d秒",
+                    hours,
+                    minutes,
+                    seconds
+            );
+        }
+
+        return String.format(
+                Locale.JAPAN,
+                "%d分%02d秒",
+                minutes,
+                seconds
+        );
+    }
+
+    //割合計算用の関数
+    private double calculatePercentage(
+            double value,
+            double total
+    ) {
+        if (total <= 0.0) {
+            return 0.0;
+        }
+
+        return value / total * 100.0;
+    }
+
+    //選択された種類に応じて期間一覧を作る関数
+    private void updateStatisticsPeriodSpinner() {
+        if (currentStatisticsRoot == null) {
+            showEmptyStatistics();
+            return;
+        }
+
+        isUpdatingStatisticsSpinner = true;
+
+        statisticsPeriodLabels.clear();
+        statisticsPeriodKeys.clear();
+
+        Object selectedItem =
+                spinnerStatisticsType.getSelectedItem();
+
+        if (selectedItem == null) {
+            showEmptyStatistics();
+            return;
+        }
+
+        String selectedType =
+                selectedItem.toString();
+
+        if (selectedType.equals("全体")) {
+            statisticsPeriodLabels.add("全期間");
+            statisticsPeriodKeys.add("allTime");
+
+        } else if (selectedType.equals("年")) {
+            JSONObject yearlyJson =
+                    currentStatisticsRoot.optJSONObject("yearly");
+
+            addYearPeriodItems(yearlyJson);
+
+        } else if (selectedType.equals("月")) {
+            JSONObject monthlyJson =
+                    currentStatisticsRoot.optJSONObject("monthly");
+
+            addMonthPeriodItems(monthlyJson);
+
+        } else if (selectedType.equals("週")) {
+            JSONObject dailyJson =
+                    currentStatisticsRoot.optJSONObject("daily");
+
+            addWeekPeriodItems(dailyJson);
+        }
+
+        if (statisticsPeriodLabels.isEmpty()) {
+            statisticsPeriodLabels.add("データなし");
+            statisticsPeriodKeys.add("");
+        }
+
+        ArrayAdapter<String> periodAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        statisticsPeriodLabels
+                );
+
+        periodAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinnerStatisticsPeriod.setAdapter(periodAdapter);
+
+        isUpdatingStatisticsSpinner = false;
+
+        displaySelectedStatistics();
+    }
+
+    //年一覧を作る関数
+    private void addYearPeriodItems(JSONObject yearlyJson) {
+        if (yearlyJson == null) {
+            return;
+        }
+
+        ArrayList<String> keys =
+                getSortedJsonKeys(yearlyJson);
+
+        for (String key : keys) {
+            statisticsPeriodKeys.add(key);
+            statisticsPeriodLabels.add(key + "年");
+        }
+    }
+
+    //月一覧を作る関数
+    private void addMonthPeriodItems(JSONObject monthlyJson) {
+        if (monthlyJson == null) {
+            return;
+        }
+
+        ArrayList<String> keys =
+                getSortedJsonKeys(monthlyJson);
+
+        for (String key : keys) {
+            statisticsPeriodKeys.add(key);
+
+            try {
+                Date date =
+                        new SimpleDateFormat(
+                                "yyyy-MM",
+                                Locale.JAPAN
+                        ).parse(key);
+
+                String label =
+                        new SimpleDateFormat(
+                                "yyyy年M月",
+                                Locale.JAPAN
+                        ).format(date);
+
+                statisticsPeriodLabels.add(label);
+
+            } catch (Exception e) {
+                statisticsPeriodLabels.add(key);
+            }
+        }
+    }
+
+    //JSONキーを新しい順に取得する関数
+    private ArrayList<String> getSortedJsonKeys(
+            JSONObject jsonObject
+    ) {
+        ArrayList<String> keys = new ArrayList<>();
+
+        if (jsonObject == null) {
+            return keys;
+        }
+
+        Iterator<String> iterator =
+                jsonObject.keys();
+
+        while (iterator.hasNext()) {
+            keys.add(iterator.next());
+        }
+
+        // yyyy、yyyy-MM、yyyy-MM-ddなら文字列の降順で新しい順になる
+        Collections.sort(
+                keys,
+                Collections.reverseOrder()
+        );
+
+        return keys;
+    }
+
+    //週一覧を作成する関数
+    private void addWeekPeriodItems(JSONObject dailyJson) {
+        if (dailyJson == null) {
+            return;
+        }
+
+        ArrayList<String> dayKeys =
+                getSortedJsonKeys(dailyJson);
+
+        ArrayList<String> weekStartKeys =
+                new ArrayList<>();
+
+        for (String dayKey : dayKeys) {
+            String weekStartKey =
+                    getWeekStartKey(dayKey);
+
+            if (weekStartKey == null) {
+                continue;
+            }
+
+            if (!weekStartKeys.contains(weekStartKey)) {
+                weekStartKeys.add(weekStartKey);
+            }
+        }
+
+        Collections.sort(
+                weekStartKeys,
+                Collections.reverseOrder()
+        );
+
+        for (String weekStartKey : weekStartKeys) {
+            statisticsPeriodKeys.add(weekStartKey);
+
+            String weekEndKey =
+                    addDaysToDateKey(
+                            weekStartKey,
+                            6
+                    );
+
+            statisticsPeriodLabels.add(
+                    formatDateKeyForLabel(weekStartKey)
+                            + " ～ "
+                            + formatDateKeyForLabel(weekEndKey)
+            );
+        }
+    }
+
+    private String getWeekStartKey(String dayKey) {
+        try {
+            SimpleDateFormat format =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    );
+
+            Date date = format.parse(dayKey);
+
+            Calendar calendar =
+                    Calendar.getInstance(Locale.JAPAN);
+
+            calendar.setTime(date);
+
+            // 月曜日を週の開始にする
+            int dayOfWeek =
+                    calendar.get(Calendar.DAY_OF_WEEK);
+
+            int daysFromMonday =
+                    (dayOfWeek + 5) % 7;
+
+            calendar.add(
+                    Calendar.DAY_OF_MONTH,
+                    -daysFromMonday
+            );
+
+            return format.format(calendar.getTime());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private String addDaysToDateKey(
+            String dayKey,
+            int days
+    ) {
+        try {
+            SimpleDateFormat format =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    );
+
+            Date date = format.parse(dayKey);
+
+            Calendar calendar =
+                    Calendar.getInstance(Locale.JAPAN);
+
+            calendar.setTime(date);
+
+            calendar.add(
+                    Calendar.DAY_OF_MONTH,
+                    days
+            );
+
+            return format.format(calendar.getTime());
+
+        } catch (Exception e) {
+            return dayKey;
+        }
+    }
+
+    private String formatDateKeyForLabel(
+            String dayKey
+    ) {
+        try {
+            Date date =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    ).parse(dayKey);
+
+            return new SimpleDateFormat(
+                    "yyyy/M/d",
+                    Locale.JAPAN
+            ).format(date);
+
+        } catch (Exception e) {
+            return dayKey;
+        }
+    }
+
+    //選択された期間の統計を表示する関数
+    private void displaySelectedStatistics() {
+        if (currentStatisticsRoot == null) {
+            showEmptyStatistics();
+            return;
+        }
+
+        int position =
+                spinnerStatisticsPeriod
+                        .getSelectedItemPosition();
+
+        if (position < 0
+                || position >= statisticsPeriodKeys.size()) {
+            showEmptyStatistics();
+            return;
+        }
+
+        String periodKey =
+                statisticsPeriodKeys.get(position);
+
+        if (periodKey.isEmpty()) {
+            showEmptyStatistics();
+            statSelectedPeriod.setText("データなし");
+            return;
+        }
+
+        Object selectedItem =
+                spinnerStatisticsType.getSelectedItem();
+
+        if (selectedItem == null) {
+            statSelectedPeriod.setText("データなし");
+            showEmptyStatistics();
+            return;
+        }
+
+        String selectedType =
+                selectedItem.toString();
+
+        JSONObject statisticsBlock = null;
+
+        if (selectedType.equals("全体")) {
+            statisticsBlock =
+                    currentStatisticsRoot
+                            .optJSONObject("allTime");
+
+        } else if (selectedType.equals("年")) {
+            JSONObject yearlyJson =
+                    currentStatisticsRoot
+                            .optJSONObject("yearly");
+
+            if (yearlyJson != null) {
+                statisticsBlock =
+                        yearlyJson.optJSONObject(periodKey);
+            }
+
+        } else if (selectedType.equals("月")) {
+            JSONObject monthlyJson =
+                    currentStatisticsRoot
+                            .optJSONObject("monthly");
+
+            if (monthlyJson != null) {
+                statisticsBlock =
+                        monthlyJson.optJSONObject(periodKey);
+            }
+
+        } else if (selectedType.equals("週")) {
+            JSONObject dailyJson =
+                    currentStatisticsRoot
+                            .optJSONObject("daily");
+
+            statisticsBlock =
+                    buildWeekStatisticsBlock(
+                            dailyJson,
+                            periodKey
+                    );
+        }
+
+        if (statisticsBlock == null) {
+            statSelectedPeriod.setText("データなし");
+            showEmptyStatistics();
+            return;
+        }
+
+        statSelectedPeriod.setText(
+                statisticsPeriodLabels.get(position)
+        );
+
+        showStatisticsBlock(statisticsBlock);
+    }
+
+    //一週間分の統計データを計算
+    private JSONObject buildWeekStatisticsBlock(
+            JSONObject dailyJson,
+            String weekStartKey
+    ) {
+        try {
+            JSONObject result =
+                    createEmptyStatisticsBlockForDisplay();
+
+            if (dailyJson == null) {
+                return result;
+            }
+
+            for (int i = 0; i < 7; i++) {
+                String dayKey =
+                        addDaysToDateKey(
+                                weekStartKey,
+                                i
+                        );
+
+                JSONObject dayBlock =
+                        dailyJson.optJSONObject(dayKey);
+
+                if (dayBlock != null) {
+                    mergeStatisticsBlocks(
+                            result,
+                            dayBlock
+                    );
+                }
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    //からの統計用表示ブロックを作成する関数
+    private JSONObject createEmptyStatisticsBlockForDisplay()
+            throws Exception {
+
+        JSONObject blockJson = new JSONObject();
+
+        JSONObject summaryJson = new JSONObject();
+        summaryJson.put("totalRideCount", 0);
+        summaryJson.put("totalDistance", 0.0);
+        summaryJson.put("totalRideTime", 0);
+        summaryJson.put("totalMovingTime", 0.0);
+        summaryJson.put("totalStopTime", 0.0);
+        summaryJson.put("totalStopCount", 0);
+
+        JSONObject recordsJson = new JSONObject();
+        recordsJson.put("maxSingleRideDistance", 0.0);
+        recordsJson.put("maxSingleRideTime", 0);
+        recordsJson.put("maxAverageSpeed", 0.0);
+        recordsJson.put("maxMovingAverageSpeed", 0.0);
+        recordsJson.put("maxGpsSpeed", 0.0);
+        recordsJson.put("longestStopTime", 0.0);
+
+        JSONObject speedJson = new JSONObject();
+        speedJson.put("time0to5", 0.0);
+        speedJson.put("time5to10", 0.0);
+        speedJson.put("time10to15", 0.0);
+        speedJson.put("time15to20", 0.0);
+        speedJson.put("time20to25", 0.0);
+        speedJson.put("time25to30", 0.0);
+        speedJson.put("time30Over", 0.0);
+
+        JSONObject distanceJson = new JSONObject();
+        distanceJson.put("ride0to5km", 0);
+        distanceJson.put("ride5to10km", 0);
+        distanceJson.put("ride10to20km", 0);
+        distanceJson.put("ride20to50km", 0);
+        distanceJson.put("ride50kmOver", 0);
+
+        blockJson.put("summary", summaryJson);
+        blockJson.put("records", recordsJson);
+        blockJson.put("speedDistribution", speedJson);
+        blockJson.put("distanceDistribution", distanceJson);
+
+        return blockJson;
+    }
+
+    //日別ブロックを週間ブロックへ合成する関数
+    private void mergeStatisticsBlocks(
+            JSONObject target,
+            JSONObject source
+    ) throws Exception {
+
+        JSONObject targetSummary =
+                target.getJSONObject("summary");
+
+        JSONObject sourceSummary =
+                source.optJSONObject("summary");
+
+        JSONObject targetRecords =
+                target.getJSONObject("records");
+
+        JSONObject sourceRecords =
+                source.optJSONObject("records");
+
+        JSONObject targetSpeed =
+                target.getJSONObject("speedDistribution");
+
+        JSONObject sourceSpeed =
+                source.optJSONObject("speedDistribution");
+
+        JSONObject targetDistance =
+                target.getJSONObject("distanceDistribution");
+
+        JSONObject sourceDistance =
+                source.optJSONObject("distanceDistribution");
+
+        if (sourceSummary != null) {
+            addLongValue(
+                    targetSummary,
+                    sourceSummary,
+                    "totalRideCount"
+            );
+
+            addDoubleValue(
+                    targetSummary,
+                    sourceSummary,
+                    "totalDistance"
+            );
+
+            addLongValue(
+                    targetSummary,
+                    sourceSummary,
+                    "totalRideTime"
+            );
+
+            addDoubleValue(
+                    targetSummary,
+                    sourceSummary,
+                    "totalMovingTime"
+            );
+
+            addDoubleValue(
+                    targetSummary,
+                    sourceSummary,
+                    "totalStopTime"
+            );
+
+            addLongValue(
+                    targetSummary,
+                    sourceSummary,
+                    "totalStopCount"
+            );
+        }
+
+        if (sourceRecords != null) {
+            setMaximumDouble(
+                    targetRecords,
+                    sourceRecords,
+                    "maxSingleRideDistance"
+            );
+
+            setMaximumLong(
+                    targetRecords,
+                    sourceRecords,
+                    "maxSingleRideTime"
+            );
+
+            setMaximumDouble(
+                    targetRecords,
+                    sourceRecords,
+                    "maxAverageSpeed"
+            );
+
+            setMaximumDouble(
+                    targetRecords,
+                    sourceRecords,
+                    "maxMovingAverageSpeed"
+            );
+
+            setMaximumDouble(
+                    targetRecords,
+                    sourceRecords,
+                    "maxGpsSpeed"
+            );
+
+            setMaximumDouble(
+                    targetRecords,
+                    sourceRecords,
+                    "longestStopTime"
+            );
+        }
+
+        if (sourceSpeed != null) {
+            String[] speedKeys = {
+                    "time0to5",
+                    "time5to10",
+                    "time10to15",
+                    "time15to20",
+                    "time20to25",
+                    "time25to30",
+                    "time30Over"
+            };
+
+            for (String key : speedKeys) {
+                addDoubleValue(
+                        targetSpeed,
+                        sourceSpeed,
+                        key
+                );
+            }
+        }
+
+        if (sourceDistance != null) {
+            String[] distanceKeys = {
+                    "ride0to5km",
+                    "ride5to10km",
+                    "ride10to20km",
+                    "ride20to50km",
+                    "ride50kmOver"
+            };
+
+            for (String key : distanceKeys) {
+                addLongValue(
+                        targetDistance,
+                        sourceDistance,
+                        key
+                );
+            }
+        }
+    }
+
+    private void addDoubleValue(
+            JSONObject target,
+            JSONObject source,
+            String key
+    ) throws Exception {
+
+        target.put(
+                key,
+                target.optDouble(key, 0.0)
+                        + source.optDouble(key, 0.0)
+        );
+    }
+
+    private void addLongValue(
+            JSONObject target,
+            JSONObject source,
+            String key
+    ) throws Exception {
+
+        target.put(
+                key,
+                target.optLong(key, 0)
+                        + source.optLong(key, 0)
+        );
+    }
+
+    private void setMaximumDouble(
+            JSONObject target,
+            JSONObject source,
+            String key
+    ) throws Exception {
+
+        target.put(
+                key,
+                Math.max(
+                        target.optDouble(key, 0.0),
+                        source.optDouble(key, 0.0)
+                )
+        );
+    }
+
+    private void setMaximumLong(
+            JSONObject target,
+            JSONObject source,
+            String key
+    ) throws Exception {
+
+        target.put(
+                key,
+                Math.max(
+                        target.optLong(key, 0),
+                        source.optLong(key, 0)
+                )
+        );
+    }
+
+    private void showStatisticsBlock(
+            JSONObject statisticsBlock
+    ) {
+        try {
             JSONObject summaryJson =
-                    rootJson.optJSONObject("summary");
+                    statisticsBlock.optJSONObject("summary");
 
             JSONObject recordsJson =
-                    rootJson.optJSONObject("records");
+                    statisticsBlock.optJSONObject("records");
 
             JSONObject speedDistributionJson =
-                    rootJson.optJSONObject("speedDistribution");
+                    statisticsBlock.optJSONObject(
+                            "speedDistribution"
+                    );
 
             JSONObject distanceDistributionJson =
-                    rootJson.optJSONObject("distanceDistribution");
+                    statisticsBlock.optJSONObject(
+                            "distanceDistribution"
+                    );
 
             if (summaryJson == null
                     || recordsJson == null
                     || speedDistributionJson == null
                     || distanceDistributionJson == null) {
 
-                Toast.makeText(
-                        this,
-                        "統計データの形式が正しくありません",
-                        Toast.LENGTH_SHORT
-                ).show();
-
+                showEmptyStatistics();
                 return;
             }
 
@@ -2532,43 +3326,39 @@ public class MainActivity extends AppCompatActivity {
 
         } catch (Exception e) {
             e.printStackTrace();
-            Toast.makeText(this, "統計データの読み込みに失敗しました", Toast.LENGTH_SHORT).show();
+            showEmptyStatistics();
         }
     }
 
-    //時間表示用関数
-    private String formatStatisticsTime(long totalSec) {
-        long hours = totalSec / 3600;
-        long minutes = (totalSec % 3600) / 60;
-        long seconds = totalSec % 60;
+    private void showEmptyStatistics() {
+        statTotalRideCount.setText("総走行回数: 0回");
+        statTotalDistance.setText("総走行距離: 0.00 km");
+        statTotalRideTime.setText("総走行時間: 0分00秒");
+        statTotalMovingTime.setText("総移動時間: 0分00秒");
+        statTotalStopTime.setText("総停止時間: 0分00秒");
+        statTotalStopCount.setText("累計停止回数: 0回");
 
-        if (hours > 0) {
-            return String.format(
-                    Locale.JAPAN,
-                    "%d時間%02d分%02d秒",
-                    hours,
-                    minutes,
-                    seconds
-            );
-        }
-
-        return String.format(
-                Locale.JAPAN,
-                "%d分%02d秒",
-                minutes,
-                seconds
+        statMaxDistance.setText("最長1回走行距離: 0.00 km");
+        statMaxRideTime.setText("最長1回走行時間: 0分00秒");
+        statMaxAverageSpeed.setText("最高平均速度: 0.0 km/h");
+        statMaxMovingAverageSpeed.setText(
+                "最高移動中平均速度: 0.0 km/h"
         );
-    }
+        statMaxGpsSpeed.setText("最高GPS速度: 0.0 km/h");
+        statLongestStopTime.setText("最長停止時間: 0分00秒");
 
-    //割合計算用の関数
-    private double calculatePercentage(
-            double value,
-            double total
-    ) {
-        if (total <= 0.0) {
-            return 0.0;
-        }
+        statSpeed0to5.setText("0～5 km/h: 0.0%（0分00秒）");
+        statSpeed5to10.setText("5～10 km/h: 0.0%（0分00秒）");
+        statSpeed10to15.setText("10～15 km/h: 0.0%（0分00秒）");
+        statSpeed15to20.setText("15～20 km/h: 0.0%（0分00秒）");
+        statSpeed20to25.setText("20～25 km/h: 0.0%（0分00秒）");
+        statSpeed25to30.setText("25～30 km/h: 0.0%（0分00秒）");
+        statSpeed30Over.setText("30 km/h以上: 0.0%（0分00秒）");
 
-        return value / total * 100.0;
+        statDistance0to5.setText("0～5 km: 0回");
+        statDistance5to10.setText("5～10 km: 0回");
+        statDistance10to20.setText("10～20 km: 0回");
+        statDistance20to50.setText("20～50 km: 0回");
+        statDistance50Over.setText("50 km以上: 0回");
     }
 }

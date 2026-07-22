@@ -488,74 +488,21 @@ public class LocationTrackingService extends Service {
     }
 
     //初期状態の統計JSONを作る関数
+    /**
+     * statistics.json全体の初期構造を作る
+     */
     private JSONObject createDefaultStatisticsJson() throws Exception {
         JSONObject rootJson = new JSONObject();
 
-        // バージョン
-        rootJson.put("version", 1);
+        rootJson.put("version", 2);
 
-        // =========================
-        // 累計情報
-        // =========================
-        JSONObject summaryJson = new JSONObject();
+        // 全期間の統計
+        rootJson.put("allTime", createDefaultStatisticsBlock());
 
-        summaryJson.put("totalRideCount", 0);
-        summaryJson.put("totalDistance", 0.0);
-        summaryJson.put("totalRideTime", 0);
-        summaryJson.put("totalMovingTime", 0.0);
-        summaryJson.put("totalStopTime", 0.0);
-        summaryJson.put("totalStopCount", 0);
-
-        rootJson.put("summary", summaryJson);
-
-        // =========================
-        // 最高記録
-        // =========================
-        JSONObject recordsJson = new JSONObject();
-
-        recordsJson.put("maxSingleRideDistance", 0.0);
-        recordsJson.put("maxSingleRideTime", 0);
-        recordsJson.put("maxAverageSpeed", 0.0);
-        recordsJson.put("maxMovingAverageSpeed", 0.0);
-        recordsJson.put("maxGpsSpeed", 0.0);
-        recordsJson.put("longestStopTime", 0.0);
-
-        rootJson.put("records", recordsJson);
-
-        // =========================
-        // 速度分布
-        // =========================
-        JSONObject speedDistributionJson = new JSONObject();
-
-        speedDistributionJson.put("time0to5", 0.0);
-        speedDistributionJson.put("time5to10", 0.0);
-        speedDistributionJson.put("time10to15", 0.0);
-        speedDistributionJson.put("time15to20", 0.0);
-        speedDistributionJson.put("time20to25", 0.0);
-        speedDistributionJson.put("time25to30", 0.0);
-        speedDistributionJson.put("time30Over", 0.0);
-
-        rootJson.put("speedDistribution", speedDistributionJson);
-
-        // =========================
-        // 距離分布
-        // =========================
-        JSONObject distanceDistributionJson = new JSONObject();
-
-        distanceDistributionJson.put("ride0to5km", 0);
-        distanceDistributionJson.put("ride5to10km", 0);
-        distanceDistributionJson.put("ride10to20km", 0);
-        distanceDistributionJson.put("ride20to50km", 0);
-        distanceDistributionJson.put("ride50kmOver", 0);
-
-        rootJson.put("distanceDistribution", distanceDistributionJson);
-
-        // =========================
-        // 月別統計
-        // =========================
-        JSONObject monthlyJson = new JSONObject();
-
-        rootJson.put("monthly", monthlyJson);
+        // 期間別統計
+        rootJson.put("yearly", new JSONObject());
+        rootJson.put("monthly", new JSONObject());
+        rootJson.put("daily", new JSONObject());
 
         return rootJson;
     }
@@ -762,368 +709,131 @@ public class LocationTrackingService extends Service {
     }
 
     //統計更新用の関数
+    /**
+     * 全体、年別、月別、日別の統計を更新する
+     */
     private boolean updateStatistics() {
         try {
             JSONObject rootJson = loadStatisticsJson();
 
-            JSONObject summaryJson =
-                    rootJson.optJSONObject("summary");
+            RideStatistics rideStats =
+                    calculateCurrentRideStatistics();
 
-            JSONObject recordsJson =
-                    rootJson.optJSONObject("records");
+            // 走行開始時刻を基準に期間を決定
+            Date rideDate = new Date(startTime);
 
-            JSONObject speedDistributionJson =
-                    rootJson.optJSONObject("speedDistribution");
+            String yearKey =
+                    new SimpleDateFormat(
+                            "yyyy",
+                            Locale.JAPAN
+                    ).format(rideDate);
 
-            JSONObject distanceDistributionJson =
-                    rootJson.optJSONObject("distanceDistribution");
+            String monthKey =
+                    new SimpleDateFormat(
+                            "yyyy-MM",
+                            Locale.JAPAN
+                    ).format(rideDate);
+
+            String dayKey =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    ).format(rideDate);
+
+            // =========================
+            // 各統計領域の取得
+            // =========================
+
+            JSONObject allTimeJson =
+                    rootJson.optJSONObject("allTime");
+
+            if (allTimeJson == null) {
+                allTimeJson = createDefaultStatisticsBlock();
+                rootJson.put("allTime", allTimeJson);
+            }
+
+            JSONObject yearlyJson =
+                    rootJson.optJSONObject("yearly");
+
+            if (yearlyJson == null) {
+                yearlyJson = new JSONObject();
+                rootJson.put("yearly", yearlyJson);
+            }
 
             JSONObject monthlyJson =
                     rootJson.optJSONObject("monthly");
-
-            // 古いファイルなどで存在しなかった場合に備える
-            if (summaryJson == null) {
-                summaryJson = new JSONObject();
-                rootJson.put("summary", summaryJson);
-            }
-
-            if (recordsJson == null) {
-                recordsJson = new JSONObject();
-                rootJson.put("records", recordsJson);
-            }
-
-            if (speedDistributionJson == null) {
-                speedDistributionJson = new JSONObject();
-                rootJson.put("speedDistribution", speedDistributionJson);
-            }
-
-            if (distanceDistributionJson == null) {
-                distanceDistributionJson = new JSONObject();
-                rootJson.put("distanceDistribution", distanceDistributionJson);
-            }
 
             if (monthlyJson == null) {
                 monthlyJson = new JSONObject();
                 rootJson.put("monthly", monthlyJson);
             }
 
-            RideStatistics rideStats =
-                    calculateCurrentRideStatistics();
+            JSONObject dailyJson =
+                    rootJson.optJSONObject("daily");
+
+            if (dailyJson == null) {
+                dailyJson = new JSONObject();
+                rootJson.put("daily", dailyJson);
+            }
+
+            JSONObject yearBlock =
+                    getOrCreatePeriodBlock(
+                            yearlyJson,
+                            yearKey
+                    );
+
+            JSONObject monthBlock =
+                    getOrCreatePeriodBlock(
+                            monthlyJson,
+                            monthKey
+                    );
+
+            JSONObject dayBlock =
+                    getOrCreatePeriodBlock(
+                            dailyJson,
+                            dayKey
+                    );
 
             // =========================
-            // 累計統計
+            // 同じ走行データを4か所に反映
             // =========================
 
-            int totalRideCount =
-                    summaryJson.optInt("totalRideCount", 0);
-
-            double allDistance =
-                    summaryJson.optDouble("totalDistance", 0.0);
-
-            long allRideTime =
-                    summaryJson.optLong("totalRideTime", 0);
-
-            double allMovingTime =
-                    summaryJson.optDouble("totalMovingTime", 0.0);
-
-            double allStopTime =
-                    summaryJson.optDouble("totalStopTime", 0.0);
-
-            int totalStopCount =
-                    summaryJson.optInt("totalStopCount", 0);
-
-            totalStopCount += rideStats.stopCount;
-
-            summaryJson.put(
-                    "totalStopCount",
-                    totalStopCount
+            updateStatisticsBlock(
+                    allTimeJson,
+                    rideStats
             );
 
-            totalRideCount += 1;
-            allDistance += totalDistance;
-            allRideTime += rideStats.rideTimeSec;
-            allMovingTime += rideStats.movingTimeSec;
-            allStopTime += rideStats.stopTimeSec;
-
-            summaryJson.put(
-                    "totalRideCount",
-                    totalRideCount
+            updateStatisticsBlock(
+                    yearBlock,
+                    rideStats
             );
 
-            summaryJson.put(
-                    "totalDistance",
-                    allDistance
+            updateStatisticsBlock(
+                    monthBlock,
+                    rideStats
             );
 
-            summaryJson.put(
-                    "totalRideTime",
-                    allRideTime
+            updateStatisticsBlock(
+                    dayBlock,
+                    rideStats
             );
 
-            summaryJson.put(
-                    "totalMovingTime",
-                    allMovingTime
-            );
+            rootJson.put("version", 2);
 
-            summaryJson.put(
-                    "totalStopTime",
-                    allStopTime
-            );
+            boolean saved =
+                    saveStatisticsJson(rootJson);
 
-            // =========================
-            // 最高記録
-            // =========================
-
-            double maxSingleRideDistance =
-                    recordsJson.optDouble(
-                            "maxSingleRideDistance",
-                            0.0
-                    );
-
-            long maxSingleRideTime =
-                    recordsJson.optLong(
-                            "maxSingleRideTime",
-                            0
-                    );
-
-            double maxAverageSpeed =
-                    recordsJson.optDouble(
-                            "maxAverageSpeed",
-                            0.0
-                    );
-
-            double maxGpsSpeed =
-                    recordsJson.optDouble(
-                            "maxGpsSpeed",
-                            0.0
-                    );
-
-            double maxMovingAverageSpeed =
-                    recordsJson.optDouble(
-                            "maxMovingAverageSpeed",
-                            0.0
-                    );
-
-            double longestStopTime =
-                    recordsJson.optDouble(
-                            "longestStopTime",
-                            0.0
-                    );
-
-            if (totalDistance > maxSingleRideDistance) {
-                maxSingleRideDistance = totalDistance;
-            }
-
-            if (rideStats.rideTimeSec > maxSingleRideTime) {
-                maxSingleRideTime = rideStats.rideTimeSec;
-            }
-
-            if (rideStats.averageSpeed > maxAverageSpeed) {
-                maxAverageSpeed = rideStats.averageSpeed;
-            }
-
-            if (rideStats.maxGpsSpeed > maxGpsSpeed) {
-                maxGpsSpeed = rideStats.maxGpsSpeed;
-            }
-
-            if (rideStats.movingAverageSpeed > maxMovingAverageSpeed) {
-                maxMovingAverageSpeed =
-                        rideStats.movingAverageSpeed;
-            }
-
-            if (rideStats.longestStopTime > longestStopTime) {
-                longestStopTime =
-                        rideStats.longestStopTime;
-            }
-
-            recordsJson.put(
-                    "maxSingleRideDistance",
-                    maxSingleRideDistance
-            );
-
-            recordsJson.put(
-                    "maxSingleRideTime",
-                    maxSingleRideTime
-            );
-
-            recordsJson.put(
-                    "maxAverageSpeed",
-                    maxAverageSpeed
-            );
-
-            recordsJson.put(
-                    "maxGpsSpeed",
-                    maxGpsSpeed
-            );
-
-            recordsJson.put(
-                    "maxMovingAverageSpeed",
-                    maxMovingAverageSpeed
-            );
-
-            recordsJson.put(
-                    "longestStopTime",
-                    longestStopTime
-            );
-
-            double totalTime0to5 =
-                    speedDistributionJson.optDouble(
-                            "time0to5",
-                            0.0
-                    );
-
-            double totalTime5to10 =
-                    speedDistributionJson.optDouble(
-                            "time5to10",
-                            0.0
-                    );
-
-            double totalTime10to15 =
-                    speedDistributionJson.optDouble(
-                            "time10to15",
-                            0.0
-                    );
-
-            double totalTime15to20 =
-                    speedDistributionJson.optDouble(
-                            "time15to20",
-                            0.0
-                    );
-
-            double totalTime20to25 =
-                    speedDistributionJson.optDouble(
-                            "time20to25",
-                            0.0
-                    );
-
-            double totalTime25to30 =
-                    speedDistributionJson.optDouble(
-                            "time25to30",
-                            0.0
-                    );
-
-            double totalTime30Over =
-                    speedDistributionJson.optDouble(
-                            "time30Over",
-                            0.0
-                    );
-
-            totalTime0to5 += rideStats.time0to5;
-            totalTime5to10 += rideStats.time5to10;
-            totalTime10to15 += rideStats.time10to15;
-            totalTime15to20 += rideStats.time15to20;
-            totalTime20to25 += rideStats.time20to25;
-            totalTime25to30 += rideStats.time25to30;
-            totalTime30Over += rideStats.time30Over;
-
-            speedDistributionJson.put(
-                    "time0to5",
-                    totalTime0to5
-            );
-
-            speedDistributionJson.put(
-                    "time5to10",
-                    totalTime5to10
-            );
-
-            speedDistributionJson.put(
-                    "time10to15",
-                    totalTime10to15
-            );
-
-            speedDistributionJson.put(
-                    "time15to20",
-                    totalTime15to20
-            );
-
-            speedDistributionJson.put(
-                    "time20to25",
-                    totalTime20to25
-            );
-
-            speedDistributionJson.put(
-                    "time25to30",
-                    totalTime25to30
-            );
-
-            speedDistributionJson.put(
-                    "time30Over",
-                    totalTime30Over
-            );
-
-            double rideDistanceKm =
-                    totalDistance / 1000.0;
-
-            if (rideDistanceKm < 5.0) {
-
-                int count =
-                        distanceDistributionJson.optInt(
-                                "ride0to5km",
-                                0
-                        );
-
-                distanceDistributionJson.put(
-                        "ride0to5km",
-                        count + 1
-                );
-
-            } else if (rideDistanceKm < 10.0) {
-
-                int count =
-                        distanceDistributionJson.optInt(
-                                "ride5to10km",
-                                0
-                        );
-
-                distanceDistributionJson.put(
-                        "ride5to10km",
-                        count + 1
-                );
-
-            } else if (rideDistanceKm < 20.0) {
-
-                int count =
-                        distanceDistributionJson.optInt(
-                                "ride10to20km",
-                                0
-                        );
-
-                distanceDistributionJson.put(
-                        "ride10to20km",
-                        count + 1
-                );
-
-            } else if (rideDistanceKm < 50.0) {
-
-                int count =
-                        distanceDistributionJson.optInt(
-                                "ride20to50km",
-                                0
-                        );
-
-                distanceDistributionJson.put(
-                        "ride20to50km",
-                        count + 1
-                );
-
-            } else {
-
-                int count =
-                        distanceDistributionJson.optInt(
-                                "ride50kmOver",
-                                0
-                        );
-
-                distanceDistributionJson.put(
-                        "ride50kmOver",
-                        count + 1
+            if (saved) {
+                Log.d(
+                        "STATISTICS",
+                        "統計更新完了"
+                                + " year=" + yearKey
+                                + ", month=" + monthKey
+                                + ", day=" + dayKey
                 );
             }
 
-
-            rootJson.put("version", 1);
-
-            return saveStatisticsJson(rootJson);
+            return saved;
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -1132,143 +842,562 @@ public class LocationTrackingService extends Service {
     }
 
     //JSSOファイル補間関数
-    private void ensureStatisticsStructure(JSONObject rootJson) throws Exception {
-        rootJson.put("version", rootJson.optInt("version", 1));
+    /**
+     * statistics.json全体の不足構造を補完する
+     */
+    private void ensureStatisticsStructure(
+            JSONObject rootJson
+    ) throws Exception {
 
-        // summary
-        JSONObject summaryJson = rootJson.optJSONObject("summary");
+        int version =
+                rootJson.optInt("version", 1);
+
+        /*
+         * 旧形式のstatistics.jsonを新形式へ移行
+         *
+         * 旧形式：
+         * root直下にsummary、recordsなどがある
+         *
+         * 新形式：
+         * allTime内にsummary、recordsなどがある
+         */
+        if (version < 2
+                && rootJson.optJSONObject("allTime") == null) {
+
+            JSONObject oldSummary =
+                    rootJson.optJSONObject("summary");
+
+            JSONObject oldRecords =
+                    rootJson.optJSONObject("records");
+
+            JSONObject oldSpeed =
+                    rootJson.optJSONObject("speedDistribution");
+
+            JSONObject oldDistance =
+                    rootJson.optJSONObject("distanceDistribution");
+
+            JSONObject allTimeJson =
+                    createDefaultStatisticsBlock();
+
+            if (oldSummary != null) {
+                allTimeJson.put(
+                        "summary",
+                        oldSummary
+                );
+            }
+
+            if (oldRecords != null) {
+                allTimeJson.put(
+                        "records",
+                        oldRecords
+                );
+            }
+
+            if (oldSpeed != null) {
+                allTimeJson.put(
+                        "speedDistribution",
+                        oldSpeed
+                );
+            }
+
+            if (oldDistance != null) {
+                allTimeJson.put(
+                        "distanceDistribution",
+                        oldDistance
+                );
+            }
+
+            rootJson.put(
+                    "allTime",
+                    allTimeJson
+            );
+
+            // 旧形式の項目を削除
+            rootJson.remove("summary");
+            rootJson.remove("records");
+            rootJson.remove("speedDistribution");
+            rootJson.remove("distanceDistribution");
+
+            Log.d(
+                    "STATISTICS",
+                    "旧統計データをversion 2形式へ変換しました"
+            );
+        }
+
+        JSONObject allTimeJson =
+                rootJson.optJSONObject("allTime");
+
+        if (allTimeJson == null) {
+            allTimeJson =
+                    createDefaultStatisticsBlock();
+
+            rootJson.put(
+                    "allTime",
+                    allTimeJson
+            );
+        }
+
+        ensureStatisticsBlockStructure(
+                allTimeJson
+        );
+
+        JSONObject yearlyJson =
+                rootJson.optJSONObject("yearly");
+
+        if (yearlyJson == null) {
+            yearlyJson = new JSONObject();
+            rootJson.put("yearly", yearlyJson);
+        }
+
+        JSONObject monthlyJson =
+                rootJson.optJSONObject("monthly");
+
+        if (monthlyJson == null) {
+            monthlyJson = new JSONObject();
+            rootJson.put("monthly", monthlyJson);
+        }
+
+        JSONObject dailyJson =
+                rootJson.optJSONObject("daily");
+
+        if (dailyJson == null) {
+            dailyJson = new JSONObject();
+            rootJson.put("daily", dailyJson);
+        }
+
+        // 既存の年別統計を補完
+        ensurePeriodCollectionStructure(yearlyJson);
+
+        // 既存の月別統計を補完
+        ensurePeriodCollectionStructure(monthlyJson);
+
+        // 既存の日別統計を補完
+        ensurePeriodCollectionStructure(dailyJson);
+
+        rootJson.put("version", 2);
+    }
+
+    /**
+     * yearly、monthly、daily内の各統計ブロックを補完する
+     */
+    private void ensurePeriodCollectionStructure(
+            JSONObject collectionJson
+    ) throws Exception {
+
+        java.util.Iterator<String> keys =
+                collectionJson.keys();
+
+        while (keys.hasNext()) {
+            String key = keys.next();
+
+            JSONObject blockJson =
+                    collectionJson.optJSONObject(key);
+
+            if (blockJson != null) {
+                ensureStatisticsBlockStructure(
+                        blockJson
+                );
+            }
+        }
+    }
+
+    /**
+     * 全体・年別・月別・日別で共通して使う統計ブロックを作る
+     */
+    private JSONObject createDefaultStatisticsBlock() throws Exception {
+        JSONObject blockJson = new JSONObject();
+
+        // 累計情報
+        JSONObject summaryJson = new JSONObject();
+        summaryJson.put("totalRideCount", 0);
+        summaryJson.put("totalDistance", 0.0);
+        summaryJson.put("totalRideTime", 0);
+        summaryJson.put("totalMovingTime", 0.0);
+        summaryJson.put("totalStopTime", 0.0);
+        summaryJson.put("totalStopCount", 0);
+
+        // 最高記録
+        JSONObject recordsJson = new JSONObject();
+        recordsJson.put("maxSingleRideDistance", 0.0);
+        recordsJson.put("maxSingleRideTime", 0);
+        recordsJson.put("maxAverageSpeed", 0.0);
+        recordsJson.put("maxMovingAverageSpeed", 0.0);
+        recordsJson.put("maxGpsSpeed", 0.0);
+        recordsJson.put("longestStopTime", 0.0);
+
+        // 速度分布
+        JSONObject speedDistributionJson = new JSONObject();
+        speedDistributionJson.put("time0to5", 0.0);
+        speedDistributionJson.put("time5to10", 0.0);
+        speedDistributionJson.put("time10to15", 0.0);
+        speedDistributionJson.put("time15to20", 0.0);
+        speedDistributionJson.put("time20to25", 0.0);
+        speedDistributionJson.put("time25to30", 0.0);
+        speedDistributionJson.put("time30Over", 0.0);
+
+        // 1回の走行距離分布
+        JSONObject distanceDistributionJson = new JSONObject();
+        distanceDistributionJson.put("ride0to5km", 0);
+        distanceDistributionJson.put("ride5to10km", 0);
+        distanceDistributionJson.put("ride10to20km", 0);
+        distanceDistributionJson.put("ride20to50km", 0);
+        distanceDistributionJson.put("ride50kmOver", 0);
+
+        blockJson.put("summary", summaryJson);
+        blockJson.put("records", recordsJson);
+        blockJson.put("speedDistribution", speedDistributionJson);
+        blockJson.put("distanceDistribution", distanceDistributionJson);
+
+        return blockJson;
+    }
+
+    /**
+     * yearly、monthly、dailyから対象期間の統計ブロックを取得する。
+     * 存在しない場合は新しく作成する。
+     */
+    private JSONObject getOrCreatePeriodBlock(
+            JSONObject periodRoot,
+            String periodKey
+    ) throws Exception {
+
+        JSONObject blockJson =
+                periodRoot.optJSONObject(periodKey);
+
+        if (blockJson == null) {
+            blockJson = createDefaultStatisticsBlock();
+            periodRoot.put(periodKey, blockJson);
+        }
+
+        ensureStatisticsBlockStructure(blockJson);
+
+        return blockJson;
+    }
+
+    /**
+     * 1つの統計ブロックに今回の走行データを加算する
+     */
+    private void updateStatisticsBlock(
+            JSONObject blockJson,
+            RideStatistics rideStats
+    ) throws Exception {
+
+        ensureStatisticsBlockStructure(blockJson);
+
+        JSONObject summaryJson =
+                blockJson.getJSONObject("summary");
+
+        JSONObject recordsJson =
+                blockJson.getJSONObject("records");
+
+        JSONObject speedDistributionJson =
+                blockJson.getJSONObject("speedDistribution");
+
+        JSONObject distanceDistributionJson =
+                blockJson.getJSONObject("distanceDistribution");
+
+        // =========================
+        // 累計統計
+        // =========================
+
+        summaryJson.put(
+                "totalRideCount",
+                summaryJson.optInt("totalRideCount", 0) + 1
+        );
+
+        summaryJson.put(
+                "totalDistance",
+                summaryJson.optDouble("totalDistance", 0.0)
+                        + totalDistance
+        );
+
+        summaryJson.put(
+                "totalRideTime",
+                summaryJson.optLong("totalRideTime", 0)
+                        + rideStats.rideTimeSec
+        );
+
+        summaryJson.put(
+                "totalMovingTime",
+                summaryJson.optDouble("totalMovingTime", 0.0)
+                        + rideStats.movingTimeSec
+        );
+
+        summaryJson.put(
+                "totalStopTime",
+                summaryJson.optDouble("totalStopTime", 0.0)
+                        + rideStats.stopTimeSec
+        );
+
+        summaryJson.put(
+                "totalStopCount",
+                summaryJson.optInt("totalStopCount", 0)
+                        + rideStats.stopCount
+        );
+
+        // =========================
+        // 最高記録
+        // =========================
+
+        recordsJson.put(
+                "maxSingleRideDistance",
+                Math.max(
+                        recordsJson.optDouble(
+                                "maxSingleRideDistance",
+                                0.0
+                        ),
+                        totalDistance
+                )
+        );
+
+        recordsJson.put(
+                "maxSingleRideTime",
+                Math.max(
+                        recordsJson.optLong(
+                                "maxSingleRideTime",
+                                0
+                        ),
+                        rideStats.rideTimeSec
+                )
+        );
+
+        recordsJson.put(
+                "maxAverageSpeed",
+                Math.max(
+                        recordsJson.optDouble(
+                                "maxAverageSpeed",
+                                0.0
+                        ),
+                        rideStats.averageSpeed
+                )
+        );
+
+        recordsJson.put(
+                "maxMovingAverageSpeed",
+                Math.max(
+                        recordsJson.optDouble(
+                                "maxMovingAverageSpeed",
+                                0.0
+                        ),
+                        rideStats.movingAverageSpeed
+                )
+        );
+
+        recordsJson.put(
+                "maxGpsSpeed",
+                Math.max(
+                        recordsJson.optDouble(
+                                "maxGpsSpeed",
+                                0.0
+                        ),
+                        rideStats.maxGpsSpeed
+                )
+        );
+
+        recordsJson.put(
+                "longestStopTime",
+                Math.max(
+                        recordsJson.optDouble(
+                                "longestStopTime",
+                                0.0
+                        ),
+                        rideStats.longestStopTime
+                )
+        );
+
+        // =========================
+        // 速度分布
+        // =========================
+
+        speedDistributionJson.put(
+                "time0to5",
+                speedDistributionJson.optDouble("time0to5", 0.0)
+                        + rideStats.time0to5
+        );
+
+        speedDistributionJson.put(
+                "time5to10",
+                speedDistributionJson.optDouble("time5to10", 0.0)
+                        + rideStats.time5to10
+        );
+
+        speedDistributionJson.put(
+                "time10to15",
+                speedDistributionJson.optDouble("time10to15", 0.0)
+                        + rideStats.time10to15
+        );
+
+        speedDistributionJson.put(
+                "time15to20",
+                speedDistributionJson.optDouble("time15to20", 0.0)
+                        + rideStats.time15to20
+        );
+
+        speedDistributionJson.put(
+                "time20to25",
+                speedDistributionJson.optDouble("time20to25", 0.0)
+                        + rideStats.time20to25
+        );
+
+        speedDistributionJson.put(
+                "time25to30",
+                speedDistributionJson.optDouble("time25to30", 0.0)
+                        + rideStats.time25to30
+        );
+
+        speedDistributionJson.put(
+                "time30Over",
+                speedDistributionJson.optDouble("time30Over", 0.0)
+                        + rideStats.time30Over
+        );
+
+        // =========================
+        // 走行距離分布
+        // =========================
+
+        double rideDistanceKm = totalDistance / 1000.0;
+
+        if (rideDistanceKm < 5.0) {
+            distanceDistributionJson.put(
+                    "ride0to5km",
+                    distanceDistributionJson.optInt(
+                            "ride0to5km",
+                            0
+                    ) + 1
+            );
+
+        } else if (rideDistanceKm < 10.0) {
+            distanceDistributionJson.put(
+                    "ride5to10km",
+                    distanceDistributionJson.optInt(
+                            "ride5to10km",
+                            0
+                    ) + 1
+            );
+
+        } else if (rideDistanceKm < 20.0) {
+            distanceDistributionJson.put(
+                    "ride10to20km",
+                    distanceDistributionJson.optInt(
+                            "ride10to20km",
+                            0
+                    ) + 1
+            );
+
+        } else if (rideDistanceKm < 50.0) {
+            distanceDistributionJson.put(
+                    "ride20to50km",
+                    distanceDistributionJson.optInt(
+                            "ride20to50km",
+                            0
+                    ) + 1
+            );
+
+        } else {
+            distanceDistributionJson.put(
+                    "ride50kmOver",
+                    distanceDistributionJson.optInt(
+                            "ride50kmOver",
+                            0
+                    ) + 1
+            );
+        }
+    }
+
+    /**
+     * 1つの統計ブロック内の不足項目を補完する
+     */
+    private void ensureStatisticsBlockStructure(
+            JSONObject blockJson
+    ) throws Exception {
+
+        JSONObject defaultBlock =
+                createDefaultStatisticsBlock();
+
+        JSONObject summaryJson =
+                blockJson.optJSONObject("summary");
 
         if (summaryJson == null) {
             summaryJson = new JSONObject();
-            rootJson.put("summary", summaryJson);
+            blockJson.put("summary", summaryJson);
         }
 
-        if (!summaryJson.has("totalRideCount")) {
-            summaryJson.put("totalRideCount", 0);
-        }
+        JSONObject defaultSummary =
+                defaultBlock.getJSONObject("summary");
 
-        if (!summaryJson.has("totalDistance")) {
-            summaryJson.put("totalDistance", 0.0);
-        }
+        copyMissingValues(
+                summaryJson,
+                defaultSummary
+        );
 
-        if (!summaryJson.has("totalRideTime")) {
-            summaryJson.put("totalRideTime", 0);
-        }
-
-        if (!summaryJson.has("totalMovingTime")) {
-            summaryJson.put("totalMovingTime", 0.0);
-        }
-
-        if (!summaryJson.has("totalStopTime")) {
-            summaryJson.put("totalStopTime", 0.0);
-        }
-
-        if (!summaryJson.has("totalStopCount")) {
-            summaryJson.put("totalStopCount", 0);
-        }
-
-        // records
-        JSONObject recordsJson = rootJson.optJSONObject("records");
+        JSONObject recordsJson =
+                blockJson.optJSONObject("records");
 
         if (recordsJson == null) {
             recordsJson = new JSONObject();
-            rootJson.put("records", recordsJson);
+            blockJson.put("records", recordsJson);
         }
 
-        if (!recordsJson.has("maxSingleRideDistance")) {
-            recordsJson.put("maxSingleRideDistance", 0.0);
-        }
+        JSONObject defaultRecords =
+                defaultBlock.getJSONObject("records");
 
-        if (!recordsJson.has("maxSingleRideTime")) {
-            recordsJson.put("maxSingleRideTime", 0);
-        }
+        copyMissingValues(
+                recordsJson,
+                defaultRecords
+        );
 
-        if (!recordsJson.has("maxAverageSpeed")) {
-            recordsJson.put("maxAverageSpeed", 0.0);
-        }
-
-        if (!recordsJson.has("maxMovingAverageSpeed")) {
-            recordsJson.put("maxMovingAverageSpeed", 0.0);
-        }
-
-        if (!recordsJson.has("maxGpsSpeed")) {
-            recordsJson.put("maxGpsSpeed", 0.0);
-        }
-
-        if (!recordsJson.has("longestStopTime")) {
-            recordsJson.put("longestStopTime", 0.0);
-        }
-
-        // speedDistribution
-        JSONObject speedJson = rootJson.optJSONObject("speedDistribution");
+        JSONObject speedJson =
+                blockJson.optJSONObject("speedDistribution");
 
         if (speedJson == null) {
             speedJson = new JSONObject();
-            rootJson.put("speedDistribution", speedJson);
+            blockJson.put("speedDistribution", speedJson);
         }
 
-        if (!speedJson.has("time0to5")) {
-            speedJson.put("time0to5", 0.0);
-        }
+        JSONObject defaultSpeed =
+                defaultBlock.getJSONObject("speedDistribution");
 
-        if (!speedJson.has("time5to10")) {
-            speedJson.put("time5to10", 0.0);
-        }
+        copyMissingValues(
+                speedJson,
+                defaultSpeed
+        );
 
-        if (!speedJson.has("time10to15")) {
-            speedJson.put("time10to15", 0.0);
-        }
-
-        if (!speedJson.has("time15to20")) {
-            speedJson.put("time15to20", 0.0);
-        }
-
-        if (!speedJson.has("time20to25")) {
-            speedJson.put("time20to25", 0.0);
-        }
-
-        if (!speedJson.has("time25to30")) {
-            speedJson.put("time25to30", 0.0);
-        }
-
-        if (!speedJson.has("time30Over")) {
-            speedJson.put("time30Over", 0.0);
-        }
-
-        // distanceDistribution
         JSONObject distanceJson =
-                rootJson.optJSONObject("distanceDistribution");
+                blockJson.optJSONObject("distanceDistribution");
 
         if (distanceJson == null) {
             distanceJson = new JSONObject();
-            rootJson.put("distanceDistribution", distanceJson);
+            blockJson.put("distanceDistribution", distanceJson);
         }
 
-        if (!distanceJson.has("ride0to5km")) {
-            distanceJson.put("ride0to5km", 0);
-        }
+        JSONObject defaultDistance =
+                defaultBlock.getJSONObject("distanceDistribution");
 
-        if (!distanceJson.has("ride5to10km")) {
-            distanceJson.put("ride5to10km", 0);
-        }
+        copyMissingValues(
+                distanceJson,
+                defaultDistance
+        );
+    }
 
-        if (!distanceJson.has("ride10to20km")) {
-            distanceJson.put("ride10to20km", 0);
-        }
+    /**
+     * targetに存在しないキーをdefaultJsonからコピーする
+     */
+    private void copyMissingValues(
+            JSONObject target,
+            JSONObject defaultJson
+    ) throws Exception {
 
-        if (!distanceJson.has("ride20to50km")) {
-            distanceJson.put("ride20to50km", 0);
-        }
+        java.util.Iterator<String> keys =
+                defaultJson.keys();
 
-        if (!distanceJson.has("ride50kmOver")) {
-            distanceJson.put("ride50kmOver", 0);
-        }
+        while (keys.hasNext()) {
+            String key = keys.next();
 
-        // monthly
-        JSONObject monthlyJson = rootJson.optJSONObject("monthly");
-
-        if (monthlyJson == null) {
-            rootJson.put("monthly", new JSONObject());
+            if (!target.has(key)) {
+                target.put(
+                        key,
+                        defaultJson.get(key)
+                );
+            }
         }
     }
 }
