@@ -90,6 +90,17 @@ public class MainActivity extends AppCompatActivity {
             this.distance = distance;
         }
     }
+    //メンテナンス予定日を入れた配列
+    private static final String[] MAINTENANCE_INTERVALS = {
+            "なし",
+            "1週間後",
+            "2週間後",
+            "1か月後",
+            "2か月後",
+            "3か月後",
+            "6か月後",
+            "1年後"
+    };
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
     private Marker currentMarker;//現在位置のピン
@@ -867,6 +878,40 @@ public class MainActivity extends AppCompatActivity {
                         "yyyy年M月d日",
                         Locale.JAPAN
                 ).format(today)
+        );
+
+        // カレンダーの日付を選択したときの処理
+        maintenanceCalendar.setOnDateChangeListener(
+                (view, year, month, dayOfMonth) -> {
+
+                    /*
+                     * CalendarViewのmonthは0始まりなので、
+                     * 表示・保存時には1を足す
+                     */
+                    selectedMaintenanceDateKey =
+                            String.format(
+                                    Locale.JAPAN,
+                                    "%04d-%02d-%02d",
+                                    year,
+                                    month + 1,
+                                    dayOfMonth
+                            );
+
+                    maintenanceSelectedDate.setText(
+                            String.format(
+                                    Locale.JAPAN,
+                                    "選択日: %d年%d月%d日",
+                                    year,
+                                    month + 1,
+                                    dayOfMonth
+                            )
+                    );
+
+                    // 選択した日の記録を表示
+                    loadMaintenanceList(
+                            selectedMaintenanceDateKey
+                    );
+                }
         );
 
         btnAddMaintenance.setOnClickListener(v -> {
@@ -4275,6 +4320,15 @@ public class MainActivity extends AppCompatActivity {
 
     //メンテナンス追加ダイアログを作る関数
     private void showAddMaintenanceDialog() {
+        showMaintenanceEditDialog(null);
+    }
+
+    private void showMaintenanceEditDialog(
+            JSONObject editingRecord
+    ) {
+        boolean isEditing =
+                editingRecord != null;
+
         LinearLayout dialogLayout =
                 new LinearLayout(this);
 
@@ -4291,7 +4345,9 @@ public class MainActivity extends AppCompatActivity {
                 0
         );
 
-        // 種類選択
+        /*
+         * メンテナンス種類
+         */
         Spinner typeSpinner =
                 new Spinner(this);
 
@@ -4318,38 +4374,213 @@ public class MainActivity extends AppCompatActivity {
 
         typeSpinner.setAdapter(typeAdapter);
 
-        // 作業内容入力
+        /*
+         * 作業内容
+         */
         EditText titleInput =
                 new EditText(this);
 
-        titleInput.setHint(
-                "作業内容"
-        );
+        titleInput.setHint("作業内容");
+        titleInput.setTextColor(Color.BLACK);
+        titleInput.setHintTextColor(Color.GRAY);
 
-        // メモ入力
+        /*
+         * メモ
+         */
         EditText memoInput =
                 new EditText(this);
 
-        memoInput.setHint(
-                "メモ"
-        );
-
+        memoInput.setHint("メモ");
         memoInput.setMinLines(3);
         memoInput.setSingleLine(false);
+        memoInput.setTextColor(Color.BLACK);
+        memoInput.setHintTextColor(Color.GRAY);
+
+        /*
+         * 費用
+         */
+        EditText costInput =
+                new EditText(this);
+
+        costInput.setHint(
+                "費用（任意、例：1200）"
+        );
+
+        costInput.setInputType(
+                android.text.InputType.TYPE_CLASS_NUMBER
+        );
+
+        costInput.setTextColor(Color.BLACK);
+        costInput.setHintTextColor(Color.GRAY);
+
+        /*
+         * 次回予定
+         */
+        TextView intervalLabel =
+                new TextView(this);
+
+        intervalLabel.setText("次回予定");
+        intervalLabel.setTextSize(16);
+        intervalLabel.setTextColor(Color.BLACK);
+        intervalLabel.setPadding(
+                0,
+                dpInt(12),
+                0,
+                dpInt(4)
+        );
+
+        Spinner intervalSpinner =
+                new Spinner(this);
+
+        ArrayAdapter<String> intervalAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        R.layout.spinner_item,
+                        MAINTENANCE_INTERVALS
+                );
+
+        intervalAdapter.setDropDownViewResource(
+                R.layout.spinner_dropdown_item
+        );
+
+        intervalSpinner.setAdapter(
+                intervalAdapter
+        );
 
         dialogLayout.addView(typeSpinner);
         dialogLayout.addView(titleInput);
         dialogLayout.addView(memoInput);
+        dialogLayout.addView(costInput);
+        dialogLayout.addView(intervalLabel);
+        dialogLayout.addView(intervalSpinner);
+
+        /*
+         * 編集時は既存の値を入力欄に表示
+         */
+        if (isEditing) {
+            String savedType =
+                    editingRecord.optString(
+                            "type",
+                            "その他"
+                    );
+
+            selectSpinnerItem(
+                    typeSpinner,
+                    savedType
+            );
+
+            titleInput.setText(
+                    editingRecord.optString(
+                            "title",
+                            ""
+                    )
+            );
+
+            memoInput.setText(
+                    editingRecord.optString(
+                            "memo",
+                            ""
+                    )
+            );
+
+            int savedCost =
+                    editingRecord.optInt(
+                            "cost",
+                            0
+                    );
+
+            if (savedCost > 0) {
+                costInput.setText(
+                        String.valueOf(savedCost)
+                );
+            }
+
+            String savedInterval =
+                    editingRecord.optString(
+                            "nextInterval",
+                            "なし"
+                    );
+
+            selectSpinnerItem(
+                    intervalSpinner,
+                    savedInterval
+            );
+
+        } else {
+            /*
+             * 新規追加時は、最初に選択されている種類の
+             * 推奨期間を設定
+             */
+            String firstType =
+                    typeSpinner
+                            .getSelectedItem()
+                            .toString();
+
+            selectSpinnerItem(
+                    intervalSpinner,
+                    getDefaultMaintenanceInterval(
+                            firstType
+                    )
+            );
+        }
+
+        /*
+         * 種類を変更したら推奨期間も変更する
+         *
+         * 編集中は既存の設定を勝手に変えないよう、
+         * ユーザーが種類を操作した時だけ反映する。
+         */
+        final boolean[] firstSelection = {
+                true
+        };
+
+        typeSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+                        if (firstSelection[0]) {
+                            firstSelection[0] = false;
+                            return;
+                        }
+
+                        String selectedType =
+                                maintenanceTypes[position];
+
+                        String defaultInterval =
+                                getDefaultMaintenanceInterval(
+                                        selectedType
+                                );
+
+                        selectSpinnerItem(
+                                intervalSpinner,
+                                defaultInterval
+                        );
+                    }
+
+                    @Override
+                    public void onNothingSelected(
+                            AdapterView<?> parent
+                    ) {
+                    }
+                }
+        );
 
         AlertDialog dialog =
                 new AlertDialog.Builder(this)
                         .setTitle(
-                                selectedMaintenanceDateKey
-                                        + " のメンテナンス"
+                                isEditing
+                                        ? "メンテナンス記録を編集"
+                                        : selectedMaintenanceDateKey
+                                          + " のメンテナンス"
                         )
                         .setView(dialogLayout)
                         .setPositiveButton(
-                                "保存",
+                                isEditing ? "更新" : "保存",
                                 null
                         )
                         .setNegativeButton(
@@ -4380,6 +4611,37 @@ public class MainActivity extends AppCompatActivity {
                                 .toString()
                                 .trim();
 
+                String costText =
+                        costInput
+                                .getText()
+                                .toString()
+                                .trim();
+
+                int cost = 0;
+
+                if (!costText.isEmpty()) {
+                    try {
+                        cost =
+                                Integer.parseInt(
+                                        costText
+                                );
+
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(
+                                this,
+                                "費用は整数で入力してください",
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        return;
+                    }
+                }
+
+                String nextInterval =
+                        intervalSpinner
+                                .getSelectedItem()
+                                .toString();
+
                 if (title.isEmpty()) {
                     Toast.makeText(
                             this,
@@ -4390,11 +4652,28 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                saveMaintenanceRecord(
-                        type,
-                        title,
-                        memo
-                );
+                if (isEditing) {
+                    updateMaintenanceRecord(
+                            editingRecord.optLong(
+                                    "id",
+                                    -1
+                            ),
+                            type,
+                            title,
+                            memo,
+                            cost,
+                            nextInterval
+                    );
+
+                } else {
+                    saveMaintenanceRecord(
+                            type,
+                            title,
+                            memo,
+                            cost,
+                            nextInterval
+                    );
+                }
 
                 dialog.dismiss();
             });
@@ -4403,55 +4682,53 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    //Spinnerの項目を選択する補助関数
+    private void selectSpinnerItem(
+            Spinner spinner,
+            String value
+    ) {
+        if (spinner == null || value == null) {
+            return;
+        }
+
+        for (int i = 0;
+             i < spinner.getCount();
+             i++) {
+
+            Object item =
+                    spinner.getItemAtPosition(i);
+
+            if (item != null
+                    && value.equals(item.toString())) {
+
+                spinner.setSelection(i);
+                return;
+            }
+        }
+    }
+
     //メンテナンス記録をJSONに保存する関数
     private void saveMaintenanceRecord(
             String type,
             String title,
-            String memo
+            String memo,
+            int cost,
+            String nextInterval
     ) {
         try {
-            File file =
-                    new File(
-                            getFilesDir(),
-                            "maintenance.json"
-                    );
-
-            JSONObject rootJson;
-
-            if (file.exists()) {
-                rootJson =
-                        new JSONObject(
-                                readTextFile(file)
-                        );
-            } else {
-                rootJson =
-                        new JSONObject();
-
-                rootJson.put(
-                        "version",
-                        1
-                );
-
-                rootJson.put(
-                        "records",
-                        new JSONArray()
-                );
-            }
+            JSONObject rootJson =
+                    loadMaintenanceJson();
 
             JSONArray recordsArray =
-                    rootJson.optJSONArray(
+                    rootJson.getJSONArray(
                             "records"
                     );
 
-            if (recordsArray == null) {
-                recordsArray =
-                        new JSONArray();
-
-                rootJson.put(
-                        "records",
-                        recordsArray
-                );
-            }
+            String nextDate =
+                    calculateNextMaintenanceDate(
+                            selectedMaintenanceDateKey,
+                            nextInterval
+                    );
 
             JSONObject recordJson =
                     new JSONObject();
@@ -4481,20 +4758,24 @@ public class MainActivity extends AppCompatActivity {
                     memo
             );
 
-            recordsArray.put(
-                    recordJson
+            recordJson.put(
+                    "cost",
+                    cost
             );
 
-            FileOutputStream fos =
-                    new FileOutputStream(file);
-
-            fos.write(
-                    rootJson
-                            .toString(4)
-                            .getBytes(StandardCharsets.UTF_8)
+            recordJson.put(
+                    "nextInterval",
+                    nextInterval
             );
 
-            fos.close();
+            recordJson.put(
+                    "nextDate",
+                    nextDate
+            );
+
+            recordsArray.put(recordJson);
+
+            saveMaintenanceJson(rootJson);
 
             loadMaintenanceList(
                     selectedMaintenanceDateKey
@@ -4507,7 +4788,11 @@ public class MainActivity extends AppCompatActivity {
             ).show();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(
+                    "MAINTENANCE",
+                    "メンテナンス記録の保存に失敗",
+                    e
+            );
 
             Toast.makeText(
                     this,
@@ -4593,6 +4878,30 @@ public class MainActivity extends AppCompatActivity {
                                 ""
                         );
 
+                long recordId =
+                        recordJson.optLong(
+                                "id",
+                                -1
+                        );
+
+                int cost =
+                        recordJson.optInt(
+                                "cost",
+                                0
+                        );
+
+                String nextDate =
+                        recordJson.optString(
+                                "nextDate",
+                                ""
+                        );
+
+                String nextInterval =
+                        recordJson.optString(
+                                "nextInterval",
+                                "なし"
+                        );
+
                 TextView recordView =
                         new TextView(this);
 
@@ -4608,6 +4917,35 @@ public class MainActivity extends AppCompatActivity {
                 if (!memo.isEmpty()) {
                     text.append("\n")
                             .append(memo);
+                }
+
+                /*
+                 * 費用が入力されたときだけ表示
+                 */
+                if (cost > 0) {
+                    text.append("\n費用: ")
+                            .append(
+                                    String.format(
+                                            Locale.JAPAN,
+                                            "%,d円",
+                                            cost
+                                    )
+                            );
+                }
+
+                /*
+                 * 次回予定が設定されているときだけ表示
+                 */
+                if (!nextDate.isEmpty()) {
+                    text.append("\n次回予定: ")
+                            .append(
+                                    formatMaintenanceDate(
+                                            nextDate
+                                    )
+                            )
+                            .append("（")
+                            .append(nextInterval)
+                            .append("）");
                 }
 
                 recordView.setText(
@@ -4650,6 +4988,19 @@ public class MainActivity extends AppCompatActivity {
                 recordView.setLayoutParams(
                         params
                 );
+
+                // この記録をタップしたとき、編集・削除メニューを表示
+                recordView.setClickable(true);
+                recordView.setFocusable(true);
+
+                JSONObject selectedRecordJson = recordJson;
+
+                recordView.setOnClickListener(v -> {
+                    showMaintenanceRecordMenu(
+                            recordView,
+                            selectedRecordJson
+                    );
+                });
 
                 maintenanceList.addView(
                         recordView
@@ -4697,5 +5048,445 @@ public class MainActivity extends AppCompatActivity {
         maintenanceList.addView(
                 emptyView
         );
+    }
+
+    //予定修理時間を初期値を返す関数
+    private String getDefaultMaintenanceInterval(
+            String maintenanceType
+    ) {
+        switch (maintenanceType) {
+            case "空気圧":
+                return "2週間後";
+
+            case "チェーン":
+                return "1か月後";
+
+            case "ブレーキ":
+                return "3か月後";
+
+            case "タイヤ":
+                return "3か月後";
+
+            case "清掃":
+                return "1か月後";
+
+            case "ライト":
+                return "3か月後";
+
+            default:
+                return "なし";
+        }
+    }
+
+    //次回予定日を計算する関数
+    private String calculateNextMaintenanceDate(
+            String baseDateKey,
+            String interval
+    ) {
+        if (interval == null || interval.equals("なし")) {
+            return "";
+        }
+
+        try {
+            SimpleDateFormat format =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    );
+
+            format.setLenient(false);
+
+            Date baseDate = format.parse(baseDateKey);
+
+            if (baseDate == null) {
+                return "";
+            }
+
+            Calendar calendar =
+                    Calendar.getInstance(Locale.JAPAN);
+
+            calendar.setTime(baseDate);
+
+            switch (interval) {
+                case "1週間後":
+                    calendar.add(Calendar.WEEK_OF_YEAR, 1);
+                    break;
+
+                case "2週間後":
+                    calendar.add(Calendar.WEEK_OF_YEAR, 2);
+                    break;
+
+                case "1か月後":
+                    calendar.add(Calendar.MONTH, 1);
+                    break;
+
+                case "2か月後":
+                    calendar.add(Calendar.MONTH, 2);
+                    break;
+
+                case "3か月後":
+                    calendar.add(Calendar.MONTH, 3);
+                    break;
+
+                case "6か月後":
+                    calendar.add(Calendar.MONTH, 6);
+                    break;
+
+                case "1年後":
+                    calendar.add(Calendar.YEAR, 1);
+                    break;
+
+                default:
+                    return "";
+            }
+
+            return format.format(calendar.getTime());
+
+        } catch (Exception e) {
+            Log.e(
+                    "MAINTENANCE",
+                    "次回予定日の計算に失敗しました",
+                    e
+            );
+
+            return "";
+        }
+    }
+
+    //JSONの読み書きを共通関数
+    //読み込み
+    private JSONObject loadMaintenanceJson()
+            throws Exception {
+
+        File file =
+                new File(
+                        getFilesDir(),
+                        "maintenance.json"
+                );
+
+        if (!file.exists()) {
+            JSONObject rootJson =
+                    new JSONObject();
+
+            rootJson.put("version", 1);
+            rootJson.put(
+                    "records",
+                    new JSONArray()
+            );
+
+            return rootJson;
+        }
+
+        JSONObject rootJson =
+                new JSONObject(
+                        readTextFile(file)
+                );
+
+        if (rootJson.optJSONArray("records") == null) {
+            rootJson.put(
+                    "records",
+                    new JSONArray()
+            );
+        }
+
+        return rootJson;
+    }
+
+    //保存
+    private void saveMaintenanceJson(
+            JSONObject rootJson
+    ) throws Exception {
+
+        File file =
+                new File(
+                        getFilesDir(),
+                        "maintenance.json"
+                );
+
+        FileOutputStream fos =
+                new FileOutputStream(file);
+
+        fos.write(
+                rootJson
+                        .toString(4)
+                        .getBytes(StandardCharsets.UTF_8)
+        );
+
+        fos.close();
+    }
+
+    //編集処理の関数
+    private void updateMaintenanceRecord(
+            long recordId,
+            String type,
+            String title,
+            String memo,
+            int cost,
+            String nextInterval
+    ) {
+        if (recordId < 0) {
+            Toast.makeText(
+                    this,
+                    "編集する記録を特定できません",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            return;
+        }
+
+        try {
+            JSONObject rootJson =
+                    loadMaintenanceJson();
+
+            JSONArray recordsArray =
+                    rootJson.getJSONArray(
+                            "records"
+                    );
+
+            boolean updated = false;
+
+            for (int i = 0;
+                 i < recordsArray.length();
+                 i++) {
+
+                JSONObject recordJson =
+                        recordsArray.getJSONObject(i);
+
+                long id =
+                        recordJson.optLong(
+                                "id",
+                                -1
+                        );
+
+                if (id != recordId) {
+                    continue;
+                }
+
+                String recordDate =
+                        recordJson.optString(
+                                "date",
+                                selectedMaintenanceDateKey
+                        );
+
+                String nextDate =
+                        calculateNextMaintenanceDate(
+                                recordDate,
+                                nextInterval
+                        );
+
+                recordJson.put("type", type);
+                recordJson.put("title", title);
+                recordJson.put("memo", memo);
+                recordJson.put("cost", cost);
+                recordJson.put(
+                        "nextInterval",
+                        nextInterval
+                );
+                recordJson.put(
+                        "nextDate",
+                        nextDate
+                );
+
+                updated = true;
+                break;
+            }
+
+            if (!updated) {
+                Toast.makeText(
+                        this,
+                        "編集対象の記録が見つかりません",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                return;
+            }
+
+            saveMaintenanceJson(rootJson);
+
+            loadMaintenanceList(
+                    selectedMaintenanceDateKey
+            );
+
+            Toast.makeText(
+                    this,
+                    "メンテナンス記録を更新しました",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+        } catch (Exception e) {
+            Log.e(
+                    "MAINTENANCE",
+                    "メンテナンス記録の更新に失敗",
+                    e
+            );
+
+            Toast.makeText(
+                    this,
+                    "メンテナンス記録の更新に失敗しました",
+                    Toast.LENGTH_SHORT
+            ).show();
+        }
+    }
+
+    //削除距離の関数
+    private void showDeleteMaintenanceConfirmDialog(
+            long recordId
+    ) {
+        new AlertDialog.Builder(this)
+                .setTitle("記録を削除")
+                .setMessage(
+                        "このメンテナンス記録を削除しますか？"
+                )
+                .setPositiveButton(
+                        "削除",
+                        (dialog, which) -> {
+                            deleteMaintenanceRecord(
+                                    recordId
+                            );
+                        }
+                )
+                .setNegativeButton(
+                        "キャンセル",
+                        null
+                )
+                .show();
+    }
+
+    private void deleteMaintenanceRecord(
+            long recordId
+    ) {
+        try {
+            JSONObject rootJson =
+                    loadMaintenanceJson();
+
+            JSONArray recordsArray =
+                    rootJson.getJSONArray(
+                            "records"
+                    );
+
+            boolean deleted = false;
+
+            for (int i = 0;
+                 i < recordsArray.length();
+                 i++) {
+
+                JSONObject recordJson =
+                        recordsArray.getJSONObject(i);
+
+                if (recordJson.optLong("id", -1)
+                        == recordId) {
+
+                    recordsArray.remove(i);
+                    deleted = true;
+                    break;
+                }
+            }
+
+            if (!deleted) {
+                Toast.makeText(
+                        this,
+                        "削除対象の記録が見つかりません",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                return;
+            }
+
+            saveMaintenanceJson(rootJson);
+
+            loadMaintenanceList(
+                    selectedMaintenanceDateKey
+            );
+
+            Toast.makeText(
+                    this,
+                    "メンテナンス記録を削除しました",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+        } catch (Exception e) {
+            Log.e(
+                    "MAINTENANCE",
+                    "メンテナンス記録の削除に失敗",
+                    e
+            );
+
+            Toast.makeText(
+                    this,
+                    "メンテナンス記録の削除に失敗しました",
+                    Toast.LENGTH_SHORT
+            ).show();
+        }
+    }
+
+    //タップした時の処理を追加
+    private void showMaintenanceRecordMenu(
+            View anchor,
+            JSONObject recordJson
+    ) {
+        PopupMenu popupMenu =
+                new PopupMenu(this, anchor);
+
+        popupMenu.getMenu().add("編集");
+        popupMenu.getMenu().add("削除");
+
+        popupMenu.setOnMenuItemClickListener(item -> {
+            String title =
+                    item.getTitle().toString();
+
+            if (title.equals("編集")) {
+                showMaintenanceEditDialog(
+                        recordJson
+                );
+
+                return true;
+            }
+
+            if (title.equals("削除")) {
+                long recordId =
+                        recordJson.optLong(
+                                "id",
+                                -1
+                        );
+
+                showDeleteMaintenanceConfirmDialog(
+                        recordId
+                );
+
+                return true;
+            }
+
+            return false;
+        });
+
+        popupMenu.show();
+    }
+
+    //日付表示用関数
+    private String formatMaintenanceDate(
+            String dateKey
+    ) {
+        try {
+            SimpleDateFormat inputFormat =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    );
+
+            Date date =
+                    inputFormat.parse(dateKey);
+
+            if (date == null) {
+                return dateKey;
+            }
+
+            return new SimpleDateFormat(
+                    "yyyy年M月d日",
+                    Locale.JAPAN
+            ).format(date);
+
+        } catch (Exception e) {
+            return dateKey;
+        }
     }
 }
