@@ -941,17 +941,176 @@
 
         </RelativeLayout>
 
-        <!-- カレンダー -->
-        <CalendarView
-            android:id="@+id/maintenanceCalendar"
+        <!-- 自作カレンダー -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:firstDayOfWeek="2"
-            android:showWeekNumber="false"
-            android:background="#FFFFFF"
-            android:theme="@style/MaintenanceCalendarTheme"
-            android:dateTextAppearance="@style/MaintenanceCalendarDateText"
-            android:weekDayTextAppearance="@style/MaintenanceCalendarWeekText" />
+            android:orientation="vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="8dp"
+            android:background="#FFFFFF">
+
+            <!-- 前月・年月・次月 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Button
+                    android:id="@+id/btnPreviousMonth"
+                    android:layout_width="56dp"
+                    android:layout_height="48dp"
+                    android:text="＜"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/textCalendarMonth"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="2026年7月"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:textColor="#000000" />
+
+                <Button
+                    android:id="@+id/btnNextMonth"
+                    android:layout_width="56dp"
+                    android:layout_height="48dp"
+                    android:text="＞"
+                    android:textSize="18sp" />
+
+            </LinearLayout>
+
+            <!-- 曜日 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="月"
+                    android:textColor="#000000"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="火"
+                    android:textColor="#000000"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="水"
+                    android:textColor="#000000"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="木"
+                    android:textColor="#000000"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="金"
+                    android:textColor="#000000"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="土"
+                    android:textColor="#1565C0"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="日"
+                    android:textColor="#C62828"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <!-- 7列×6行の日付 -->
+            <GridLayout
+                android:id="@+id/maintenanceCalendarGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="7"
+                android:rowCount="6" />
+
+            <!-- カレンダーの色の説明 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingTop="4dp"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:layout_marginEnd="8dp"
+                    android:text="記録あり"
+                    android:textColor="#000000"
+                    android:background="#C8E6C9" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:layout_marginEnd="8dp"
+                    android:text="予定あり"
+                    android:textColor="#000000"
+                    android:background="#FFF9C4" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:text="選択中"
+                    android:textColor="#000000"
+                    android:background="#BBDEFB" />
+
+            </LinearLayout>
+
+        </LinearLayout>
         <!-- 選択中の日付 -->
         <TextView
             android:id="@+id/maintenanceSelectedDate"

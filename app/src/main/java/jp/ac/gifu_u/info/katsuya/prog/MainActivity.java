@@ -57,6 +57,8 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Iterator;
 import android.widget.CalendarView;
+import android.widget.GridLayout;
+import java.util.HashSet;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -245,11 +247,27 @@ public class MainActivity extends AppCompatActivity {
     private TextView statDistanceChartTitle;
     // メンテナンス画面用
     private View maintenanceLayout;
-    private CalendarView maintenanceCalendar;
+
+    private GridLayout maintenanceCalendarGrid;
+    private TextView textCalendarMonth;
+    private Button btnPreviousMonth;
+    private Button btnNextMonth;
+
     private TextView maintenanceSelectedDate;
     private LinearLayout maintenanceList;
     private TextView btnMaintenanceMenu;
     private Button btnAddMaintenance;
+
+    // 現在カレンダーに表示している年月
+    private Calendar maintenanceDisplayCalendar;
+
+    // メンテナンス実施記録が存在する日付
+    private final HashSet<String> maintenanceRecordDates =
+            new HashSet<>();
+
+    // 次回メンテナンス予定日
+    private final HashSet<String> maintenanceScheduledDates =
+            new HashSet<>();
 
     // 現在選択している日付
     private String selectedMaintenanceDateKey;
@@ -869,8 +887,25 @@ public class MainActivity extends AppCompatActivity {
         maintenanceLayout =
                 findViewById(R.id.maintenanceLayout);
 
-        maintenanceCalendar =
-                findViewById(R.id.maintenanceCalendar);
+        maintenanceCalendarGrid =
+                findViewById(
+                        R.id.maintenanceCalendarGrid
+                );
+
+        textCalendarMonth =
+                findViewById(
+                        R.id.textCalendarMonth
+                );
+
+        btnPreviousMonth =
+                findViewById(
+                        R.id.btnPreviousMonth
+                );
+
+        btnNextMonth =
+                findViewById(
+                        R.id.btnNextMonth
+                );
 
         maintenanceSelectedDate =
                 findViewById(R.id.maintenanceSelectedDate);
@@ -901,40 +936,36 @@ public class MainActivity extends AppCompatActivity {
                 ).format(today)
         );
 
-        // カレンダーの日付を選択したときの処理
-        maintenanceCalendar.setOnDateChangeListener(
-                (view, year, month, dayOfMonth) -> {
+        // 自作カレンダーの初期表示月を今月にする
+        maintenanceDisplayCalendar =
+                Calendar.getInstance(
+                        Locale.JAPAN
+                );
 
-                    /*
-                     * CalendarViewのmonthは0始まりなので、
-                     * 表示・保存時には1を足す
-                     */
-                    selectedMaintenanceDateKey =
-                            String.format(
-                                    Locale.JAPAN,
-                                    "%04d-%02d-%02d",
-                                    year,
-                                    month + 1,
-                                    dayOfMonth
-                            );
-
-                    //テキストを変更
-                    maintenanceSelectedDate.setText(
-                            String.format(
-                                    Locale.JAPAN,
-                                    "選択日: %d年%d月%d日",
-                                    year,
-                                    month + 1,
-                                    dayOfMonth
-                            )
-                    );
-
-                    // 選択した日の記録を表示
-                    loadMaintenanceList(
-                            selectedMaintenanceDateKey
-                    );
-                }
+        maintenanceDisplayCalendar.set(
+                Calendar.DAY_OF_MONTH,
+                1
         );
+
+        btnPreviousMonth.setOnClickListener(v -> {
+            maintenanceDisplayCalendar.add(
+                    Calendar.MONTH,
+                    -1
+            );
+
+            updateMaintenanceCalendar();
+        });
+
+        btnNextMonth.setOnClickListener(v -> {
+            maintenanceDisplayCalendar.add(
+                    Calendar.MONTH,
+                    1
+            );
+
+            updateMaintenanceCalendar();
+        });
+
+        updateMaintenanceCalendar();
 
         //メンテナンス記録追加ボタンの処理
         btnAddMaintenance.setOnClickListener(v -> {
@@ -1287,16 +1318,17 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (mode == AppMode.STATISTICS) {
-            statisticsLayout.setVisibility(View.VISIBLE);
-            loadStatistics();
+            statisticsLayout.setVisibility(View.VISIBLE);//統計モードのレイアウトを表示
+            loadStatistics();//統計データの読み取り
             return;
         }
 
         if (mode == AppMode.MAINTENANCE) {
             maintenanceLayout.setVisibility(
                     View.VISIBLE
-            );
+            );//メンテナンスのレイアウトを表示
 
+            //選択日がない場合、今の日付にする
             if (selectedMaintenanceDateKey == null) {
                 Date today = new Date();
 
@@ -1317,7 +1349,9 @@ public class MainActivity extends AppCompatActivity {
 
             loadMaintenanceList(
                     selectedMaintenanceDateKey
-            );
+            );//メンテナンスリストを読み取り
+
+            updateMaintenanceCalendar();//カレンダーの更新
 
             return;
         }
@@ -1427,9 +1461,9 @@ public class MainActivity extends AppCompatActivity {
         /*
          * 選択中の期間フィルターを取得
          */
-        String selectedPeriod =
-                "すべての期間";
+        String selectedPeriod = "すべての期間";
 
+        //スピナーの選択している時期がある場合、それを選択時期とする
         if (spinnerHistoryPeriod != null
                 && spinnerHistoryPeriod.getSelectedItem() != null) {
 
@@ -1457,8 +1491,7 @@ public class MainActivity extends AppCompatActivity {
         /*
          * 選択中の並び順を取得
          */
-        String selectedSort =
-                "新しい順";
+        String selectedSort = "新しい順";
 
         if (spinnerHistorySort != null
                 && spinnerHistorySort.getSelectedItem() != null) {
@@ -4930,6 +4963,8 @@ public class MainActivity extends AppCompatActivity {
                     selectedMaintenanceDateKey
             );
 
+            updateMaintenanceCalendar();//カレンダーの更新
+
             Toast.makeText(
                     this,
                     "メンテナンス記録を保存しました",
@@ -5724,6 +5759,8 @@ public class MainActivity extends AppCompatActivity {
                     selectedMaintenanceDateKey
             );
 
+            updateMaintenanceCalendar();//カレンダーの更新
+
             Toast.makeText(
                     this,
                     "メンテナンス記録を更新しました",
@@ -5814,6 +5851,8 @@ public class MainActivity extends AppCompatActivity {
             loadMaintenanceList(
                     selectedMaintenanceDateKey
             );
+
+            updateMaintenanceCalendar();//カレンダーの更新
 
             Toast.makeText(
                     this,
@@ -5974,6 +6013,414 @@ public class MainActivity extends AppCompatActivity {
             );
 
             return Long.MAX_VALUE;
+        }
+    }
+
+    /**
+     * JSONから記録日一覧を読み込む関数
+     * maintenance.jsonから、
+     * 実施日と次回予定日を読み込む
+     */
+    private void loadMaintenanceCalendarDates() {
+        // 再読み込み前に古い情報を消す
+        maintenanceRecordDates.clear();
+        maintenanceScheduledDates.clear();
+
+        try {
+            File file =
+                    new File(
+                            getFilesDir(),
+                            "maintenance.json"
+                    );
+
+            if (!file.exists()) {
+                return;
+            }
+
+            JSONObject rootJson =
+                    new JSONObject(
+                            readTextFile(file)
+                    );
+
+            JSONArray recordsArray =
+                    rootJson.optJSONArray(
+                            "records"
+                    );
+
+            if (recordsArray == null) {
+                return;
+            }
+
+            for (int i = 0;
+                 i < recordsArray.length();
+                 i++) {
+
+                JSONObject recordJson =
+                        recordsArray.getJSONObject(i);
+
+                /*
+                 * メンテナンスを実施した日
+                 */
+                String recordDate =
+                        recordJson.optString(
+                                "date",
+                                ""
+                        );
+
+                if (!recordDate.isEmpty()) {
+                    maintenanceRecordDates.add(
+                            recordDate
+                    );
+                }
+
+                /*
+                 * 次回メンテナンス予定日
+                 */
+                String nextDate =
+                        recordJson.optString(
+                                "nextDate",
+                                ""
+                        );
+
+                if (!nextDate.isEmpty()) {
+                    maintenanceScheduledDates.add(
+                            nextDate
+                    );
+                }
+            }
+
+        } catch (Exception e) {
+            Log.e(
+                    "MAINTENANCE",
+                    "カレンダー日付情報の読み込みに失敗しました",
+                    e
+            );
+        }
+    }
+
+    /**
+     * カレンダーの日付1マスを作る関数
+     */
+    private TextView createMaintenanceDayView(
+            int position
+    ) {
+        TextView dayView =
+                new TextView(this);
+
+        dayView.setTextSize(16);
+        dayView.setTextColor(
+                Color.BLACK
+        );
+
+        dayView.setGravity(
+                android.view.Gravity.CENTER
+        );
+
+        dayView.setClickable(true);
+        dayView.setFocusable(true);
+
+        /*
+         * 42マスの位置から、
+         * 何行目・何列目かを求める
+         */
+        int row =
+                position / 7;
+
+        int column =
+                position % 7;
+
+        GridLayout.LayoutParams params =
+                new GridLayout.LayoutParams();
+
+        params.width = 0;
+        params.height = dpInt(48);
+
+        /*
+         * 列は7等分する
+         */
+        params.columnSpec =
+                GridLayout.spec(
+                        column,
+                        1f
+                );
+
+        /*
+         * 行番号を明示する
+         * 行方向には重みを設定しない
+         */
+        params.rowSpec =
+                GridLayout.spec(
+                        row
+                );
+
+        params.setMargins(
+                dpInt(2),
+                dpInt(2),
+                dpInt(2),
+                dpInt(2)
+        );
+
+        dayView.setLayoutParams(params);
+
+        return dayView;
+    }
+
+    /**
+     * カレンダーを描画する関数
+     * 表示中の年月に合わせてカレンダーを再描画する
+     */
+    private void updateMaintenanceCalendar() {
+        if (maintenanceCalendarGrid == null
+                || maintenanceDisplayCalendar == null) {
+            return;
+        }
+
+        /*
+         * JSONはここで1回だけ読み込む
+         * 各日付セルではcontainsだけで判定する
+         */
+        loadMaintenanceCalendarDates();
+
+        maintenanceCalendarGrid.removeAllViews();
+
+        int year =
+                maintenanceDisplayCalendar.get(
+                        Calendar.YEAR
+                );
+
+        int month =
+                maintenanceDisplayCalendar.get(
+                        Calendar.MONTH
+                );
+
+        textCalendarMonth.setText(
+                String.format(
+                        Locale.JAPAN,
+                        "%d年%d月",
+                        year,
+                        month + 1
+                )
+        );
+
+        Calendar firstDay =
+                Calendar.getInstance(
+                        Locale.JAPAN
+                );
+
+        firstDay.set(
+                year,
+                month,
+                1
+        );
+
+        firstDay.set(
+                Calendar.HOUR_OF_DAY,
+                0
+        );
+        firstDay.set(Calendar.MINUTE, 0);
+        firstDay.set(Calendar.SECOND, 0);
+        firstDay.set(Calendar.MILLISECOND, 0);
+
+        /*
+         * 月曜日を0、火曜日を1、…、日曜日を6に変換
+         */
+        int startPosition =
+                (firstDay.get(Calendar.DAY_OF_WEEK)
+                        + 5) % 7;
+
+        int maxDay =
+                firstDay.getActualMaximum(
+                        Calendar.DAY_OF_MONTH
+                );
+
+        /*
+         * 7列×6行なので42マス作る
+         */
+        for (int position = 0;
+             position < 42;
+             position++) {
+
+            TextView dayView =
+                    createMaintenanceDayView(
+                            position
+                    );
+
+            int day =
+                    position
+                            - startPosition
+                            + 1;
+
+            /*
+             * その月に存在しない空白セル
+             */
+            if (day < 1 || day > maxDay) {
+                dayView.setText("");
+                dayView.setClickable(false);
+
+                maintenanceCalendarGrid.addView(
+                        dayView
+                );
+
+                continue;
+            }
+
+            dayView.setText(
+                    String.valueOf(day)
+            );
+
+            String dateKey =
+                    String.format(
+                            Locale.JAPAN,
+                            "%04d-%02d-%02d",
+                            year,
+                            month + 1,
+                            day
+                    );
+
+            boolean hasRecord =
+                    maintenanceRecordDates.contains(
+                            dateKey
+                    );
+
+            boolean hasSchedule =
+                    maintenanceScheduledDates.contains(
+                            dateKey
+                    );
+
+            boolean isSelected =
+                    dateKey.equals(
+                            selectedMaintenanceDateKey
+                    );
+
+            /*
+             * 背景色の優先順位
+             *
+             * 1. 選択中：青
+             * 2. 実施記録あり：緑
+             * 3. 次回予定あり：黄色
+             * 4. 何もなし：白
+             */
+            if (isSelected) {
+
+                // 選択中：薄い青
+                dayView.setBackgroundColor(
+                        Color.rgb(
+                                187,
+                                222,
+                                251
+                        )
+                );
+
+            } else if (hasRecord) {
+
+                // 実施記録あり：薄い緑
+                dayView.setBackgroundColor(
+                        Color.rgb(
+                                200,
+                                230,
+                                201
+                        )
+                );
+
+            } else if (hasSchedule) {
+
+                // 次回予定あり：薄い黄色
+                dayView.setBackgroundColor(
+                        Color.rgb(
+                                255,
+                                249,
+                                196
+                        )
+                );
+
+            } else {
+
+                // 通常
+                dayView.setBackgroundColor(
+                        Color.WHITE
+                );
+            }
+
+            /*
+             * 選択中の日付は薄い青を優先
+             */
+            if (dateKey.equals(
+                    selectedMaintenanceDateKey
+            )) {
+                dayView.setBackgroundColor(
+                        Color.rgb(
+                                187,
+                                222,
+                                251
+                        )
+                );
+            }
+
+            /*
+             * 土曜日・日曜日の文字色
+             *
+             * position % 7
+             * 0=月、1=火、…、5=土、6=日
+             */
+            int weekColumn =
+                    position % 7;
+
+            if (weekColumn == 5) {
+                dayView.setTextColor(
+                        Color.rgb(
+                                21,
+                                101,
+                                192
+                        )
+                );
+
+            } else if (weekColumn == 6) {
+                dayView.setTextColor(
+                        Color.rgb(
+                                198,
+                                40,
+                                40
+                        )
+                );
+
+            } else {
+                dayView.setTextColor(
+                        Color.BLACK
+                );
+            }
+
+            final int selectedYear = year;
+            final int selectedMonth = month;
+            final int selectedDay = day;
+            final String selectedDateKey = dateKey;
+
+            dayView.setOnClickListener(v -> {
+                selectedMaintenanceDateKey =
+                        selectedDateKey;
+
+                maintenanceSelectedDate.setText(
+                        String.format(
+                                Locale.JAPAN,
+                                "選択日: %d年%d月%d日",
+                                selectedYear,
+                                selectedMonth + 1,
+                                selectedDay
+                        )
+                );
+
+                loadMaintenanceList(
+                        selectedMaintenanceDateKey
+                );
+
+                /*
+                 * 選択中の日付色を更新
+                 */
+                updateMaintenanceCalendar();
+            });
+
+            maintenanceCalendarGrid.addView(
+                    dayView
+            );
         }
     }
 }
