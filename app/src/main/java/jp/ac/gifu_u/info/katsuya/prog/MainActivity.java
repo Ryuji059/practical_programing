@@ -101,6 +101,17 @@ public class MainActivity extends AppCompatActivity {
             "6か月後",
             "1年後"
     };
+    // 走行距離による次回メンテナンス目安
+    private static final String[] MAINTENANCE_DISTANCE_INTERVALS = {
+            "なし",
+            "100 km後",
+            "300 km後",
+            "500 km後",
+            "1,000 km後",
+            "2,000 km後",
+            "3,000 km後",
+            "5,000 km後"
+    };
     private MapView map;//地図のインスタンス
     private LocationManager locationManager;//位置管理用
     private Marker currentMarker;//現在位置のピン
@@ -755,7 +766,7 @@ public class MainActivity extends AppCompatActivity {
         statDistance20to50 = findViewById(R.id.statDistance20to50);
         statDistance50Over = findViewById(R.id.statDistance50Over);
 
-        //表示期間変更用
+        //表示期間変更用スピナーのID取得
         spinnerStatisticsType =
                 findViewById(R.id.spinnerStatisticsType);
 
@@ -780,11 +791,13 @@ public class MainActivity extends AppCompatActivity {
         //統計用種類スピナーの初期化
         ArrayList<String> typeList = new ArrayList<>();
 
+        //スピナーに表示する項目を追加
         typeList.add("全体");
         typeList.add("年");
         typeList.add("月");
         typeList.add("週");
 
+        //スピナーを作成
         ArrayAdapter<String> typeAdapter =
                 new ArrayAdapter<>(
                         this,
@@ -792,15 +805,18 @@ public class MainActivity extends AppCompatActivity {
                         typeList
                 );
 
+        //レイアウト指定
         typeAdapter.setDropDownViewResource(
                 R.layout.spinner_dropdown_item
         );
 
+        //spinnerStatisticsTypeに上で作ったスピナーを適応
         spinnerStatisticsType.setAdapter(typeAdapter);
 
         //スピナー選択時の処理
         spinnerStatisticsType.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
+                    //スピナーの項目が選ばれたときの処理
                     @Override
                     public void onItemSelected(
                             AdapterView<?> parent,
@@ -809,20 +825,23 @@ public class MainActivity extends AppCompatActivity {
                             long id
                     ) {
                         if (isUpdatingStatisticsSpinner) {
-                            return;
+                            return;//今更新中なら何もしない
                         }
-
+                        //選択された項目になるように統計を更新
                         updateStatisticsPeriodSpinner();
                     }
 
+                    //何も選ばれなかった時の処理
                     @Override
                     public void onNothingSelected(AdapterView<?> parent) {
                     }
                 }
         );
 
+        //表示時期を変更するスライダーの処理
         spinnerStatisticsPeriod.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
+                    //何か選ばれたときの処理
                     @Override
                     public void onItemSelected(
                             AdapterView<?> parent,
@@ -830,10 +849,12 @@ public class MainActivity extends AppCompatActivity {
                             int position,
                             long id
                     ) {
+                        //変更中なら何もしない
                         if (isUpdatingStatisticsSpinner) {
                             return;
                         }
 
+                        //選択したものに合わせて統計データの表示を更新
                         displaySelectedStatistics();
                     }
 
@@ -897,6 +918,7 @@ public class MainActivity extends AppCompatActivity {
                                     dayOfMonth
                             );
 
+                    //テキストを変更
                     maintenanceSelectedDate.setText(
                             String.format(
                                     Locale.JAPAN,
@@ -914,10 +936,12 @@ public class MainActivity extends AppCompatActivity {
                 }
         );
 
+        //メンテナンス記録追加ボタンの処理
         btnAddMaintenance.setOnClickListener(v -> {
             showAddMaintenanceDialog();
         });
 
+        //メニューバーを押した時の処理
         btnMaintenanceMenu.setOnClickListener(v -> {
             showMainMenu(btnMaintenanceMenu);
         });
@@ -928,30 +952,37 @@ public class MainActivity extends AppCompatActivity {
             public void onReceive(Context context, Intent intent) {
                 String action = intent.getAction();
 
+                //LocationTrackingServiceが位置情報を更新した時の処理
                 if (LocationTrackingService.ACTION_LOCATION_UPDATE.equals(action)) {
+                    //LocationTrackingServiceから緯度と経度を受け取る
                     double lat = intent.getDoubleExtra(LocationTrackingService.EXTRA_LAT, 0.0);
                     double lon = intent.getDoubleExtra(LocationTrackingService.EXTRA_LON, 0.0);
 
-                    addLiveRoutePoint(lat, lon);
+                    addLiveRoutePoint(lat, lon);//ルートポイントに追加
 
+                    //更新された位置に画面を追従させる
                     if (isRecording && isFollowingCurrentLocation && currentPoint != null) {
                         map.getController().animateTo(currentPoint);
                     }
 
-                    map.invalidate();
+                    map.invalidate();//レイアウトの更新
                     return;
                 }
 
+                //LocationTrackingServiceから受け取れていない位置情報がある場合
                 if (LocationTrackingService.ACTION_ROUTE_SNAPSHOT.equals(action)) {
+                    //JSON形式でスナップショットを受け取る
                     String routeJsonText = intent.getStringExtra(LocationTrackingService.EXTRA_ROUTE_JSON);
 
+                    //JSONからルートポイントを復元
                     restoreLiveRouteFromJson(routeJsonText);
 
+                    //更新された位置に画面を追従させる
                     if (isRecording && isFollowingCurrentLocation && currentPoint != null) {
                         map.getController().animateTo(currentPoint);
                     }
 
-                    map.invalidate();
+                    map.invalidate();//更新
                 }
             }
         };
@@ -987,6 +1018,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
 
+        //画面復帰時に自分の走ったルートを描画する処理
         IntentFilter filter = new IntentFilter();
         filter.addAction(LocationTrackingService.ACTION_LOCATION_UPDATE);
         filter.addAction(LocationTrackingService.ACTION_ROUTE_SNAPSHOT);
@@ -1008,6 +1040,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onStop() {
         super.onStop();
 
+        //バックグラウンドに回した時にレシーバーを解除する
         try {
             unregisterReceiver(trackingReceiver);
         } catch (Exception e) {
@@ -4375,6 +4408,44 @@ public class MainActivity extends AppCompatActivity {
         typeSpinner.setAdapter(typeAdapter);
 
         /*
+         * 距離による次回目安
+         */
+        TextView distanceIntervalLabel =
+                new TextView(this);
+
+        distanceIntervalLabel.setText(
+                "走行距離による次回目安"
+        );
+        distanceIntervalLabel.setTextSize(16);
+        distanceIntervalLabel.setTextColor(
+                Color.BLACK
+        );
+        distanceIntervalLabel.setPadding(
+                0,
+                dpInt(12),
+                0,
+                dpInt(4)
+        );
+
+        Spinner distanceIntervalSpinner =
+                new Spinner(this);
+
+        ArrayAdapter<String> distanceIntervalAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        R.layout.spinner_item,
+                        MAINTENANCE_DISTANCE_INTERVALS
+                );
+
+        distanceIntervalAdapter.setDropDownViewResource(
+                R.layout.spinner_dropdown_item
+        );
+
+        distanceIntervalSpinner.setAdapter(
+                distanceIntervalAdapter
+        );
+
+        /*
          * 作業内容
          */
         EditText titleInput =
@@ -4447,12 +4518,15 @@ public class MainActivity extends AppCompatActivity {
                 intervalAdapter
         );
 
+        //ダイアログの表示
         dialogLayout.addView(typeSpinner);
         dialogLayout.addView(titleInput);
         dialogLayout.addView(memoInput);
         dialogLayout.addView(costInput);
         dialogLayout.addView(intervalLabel);
         dialogLayout.addView(intervalSpinner);
+        dialogLayout.addView(distanceIntervalLabel);
+        dialogLayout.addView(distanceIntervalSpinner);
 
         /*
          * 編集時は既存の値を入力欄に表示
@@ -4506,6 +4580,17 @@ public class MainActivity extends AppCompatActivity {
                     savedInterval
             );
 
+            String savedDistanceInterval =
+                    editingRecord.optString(
+                            "nextDistanceIntervalLabel",
+                            "なし"
+                    );
+
+            selectSpinnerItem(
+                    distanceIntervalSpinner,
+                    savedDistanceInterval
+            );
+
         } else {
             /*
              * 新規追加時は、最初に選択されている種類の
@@ -4519,6 +4604,13 @@ public class MainActivity extends AppCompatActivity {
             selectSpinnerItem(
                     intervalSpinner,
                     getDefaultMaintenanceInterval(
+                            firstType
+                    )
+            );
+
+            selectSpinnerItem(
+                    distanceIntervalSpinner,
+                    getDefaultMaintenanceDistanceInterval(
                             firstType
                     )
             );
@@ -4559,6 +4651,16 @@ public class MainActivity extends AppCompatActivity {
                         selectSpinnerItem(
                                 intervalSpinner,
                                 defaultInterval
+                        );
+
+                        String defaultDistanceInterval =
+                                getDefaultMaintenanceDistanceInterval(
+                                        selectedType
+                                );
+
+                        selectSpinnerItem(
+                                distanceIntervalSpinner,
+                                defaultDistanceInterval
                         );
                     }
 
@@ -4642,6 +4744,11 @@ public class MainActivity extends AppCompatActivity {
                                 .getSelectedItem()
                                 .toString();
 
+                String nextDistanceIntervalLabel =
+                        distanceIntervalSpinner
+                                .getSelectedItem()
+                                .toString();
+
                 if (title.isEmpty()) {
                     Toast.makeText(
                             this,
@@ -4662,7 +4769,8 @@ public class MainActivity extends AppCompatActivity {
                             title,
                             memo,
                             cost,
-                            nextInterval
+                            nextInterval,
+                            nextDistanceIntervalLabel
                     );
 
                 } else {
@@ -4671,7 +4779,8 @@ public class MainActivity extends AppCompatActivity {
                             title,
                             memo,
                             cost,
-                            nextInterval
+                            nextInterval,
+                            nextDistanceIntervalLabel
                     );
                 }
 
@@ -4713,7 +4822,8 @@ public class MainActivity extends AppCompatActivity {
             String title,
             String memo,
             int cost,
-            String nextInterval
+            String nextInterval,
+            String nextDistanceIntervalLabel
     ) {
         try {
             JSONObject rootJson =
@@ -4729,6 +4839,25 @@ public class MainActivity extends AppCompatActivity {
                             selectedMaintenanceDateKey,
                             nextInterval
                     );
+
+            // メンテナンス実施時点の累計距離
+            double distanceAtMaintenance =
+                    getCurrentTotalDistanceMeters();
+
+            // 選択された次回までの距離
+            double nextDistanceInterval =
+                    getMaintenanceDistanceMeters(
+                            nextDistanceIntervalLabel
+                    );
+
+            // 次回の累計距離目安
+            double nextDistance = 0.0;
+
+            if (nextDistanceInterval > 0.0) {
+                nextDistance =
+                        distanceAtMaintenance
+                                + nextDistanceInterval;
+            }
 
             JSONObject recordJson =
                     new JSONObject();
@@ -4771,6 +4900,26 @@ public class MainActivity extends AppCompatActivity {
             recordJson.put(
                     "nextDate",
                     nextDate
+            );
+
+            recordJson.put(
+                    "distanceAtMaintenance",
+                    distanceAtMaintenance
+            );
+
+            recordJson.put(
+                    "nextDistanceInterval",
+                    nextDistanceInterval
+            );
+
+            recordJson.put(
+                    "nextDistanceIntervalLabel",
+                    nextDistanceIntervalLabel
+            );
+
+            recordJson.put(
+                    "nextDistance",
+                    nextDistance
             );
 
             recordsArray.put(recordJson);
@@ -4837,6 +4986,10 @@ public class MainActivity extends AppCompatActivity {
 
             int matchCount = 0;
 
+            // 現在の累計走行距離
+            double currentTotalDistance =
+                    getCurrentTotalDistanceMeters();
+
             /*
              * 後から保存した記録を上に表示するため、
              * 配列の後ろから読み込む
@@ -4902,6 +5055,18 @@ public class MainActivity extends AppCompatActivity {
                                 "なし"
                         );
 
+                double nextDistance =
+                        recordJson.optDouble(
+                                "nextDistance",
+                                0.0
+                        );
+
+                String nextDistanceIntervalLabel =
+                        recordJson.optString(
+                                "nextDistanceIntervalLabel",
+                                "なし"
+                        );
+
                 TextView recordView =
                         new TextView(this);
 
@@ -4948,6 +5113,36 @@ public class MainActivity extends AppCompatActivity {
                             .append("）");
                 }
 
+                /*
+                 * 距離による次回目安を表示
+                 */
+                if (nextDistance > 0.0) {
+                    double remainingDistance =
+                            nextDistance
+                                    - currentTotalDistance;
+
+                    if (remainingDistance > 0.0) {
+                        text.append(
+                                String.format(
+                                        Locale.JAPAN,
+                                        "\n距離目安: あと%.0f km（%s）",
+                                        remainingDistance / 1000.0,
+                                        nextDistanceIntervalLabel
+                                )
+                        );
+
+                    } else {
+                        text.append(
+                                String.format(
+                                        Locale.JAPAN,
+                                        "\n距離目安: %.0f km超過",
+                                        Math.abs(remainingDistance)
+                                                / 1000.0
+                                )
+                        );
+                    }
+                }
+
                 recordView.setText(
                         text.toString()
                 );
@@ -4957,13 +5152,75 @@ public class MainActivity extends AppCompatActivity {
                         Color.BLACK
                 );
 
-                recordView.setBackgroundColor(
-                        Color.rgb(
-                                235,
-                                235,
-                                235
-                        )
-                );
+                long daysUntil =
+                        getDaysUntilMaintenanceDate(
+                                nextDate
+                        );
+
+                /*
+                 * 日付による状態
+                 */
+                boolean overdueByDate =
+                        daysUntil < 0;
+
+                boolean comingSoonByDate =
+                        daysUntil >= 0
+                                && daysUntil <= 7;
+
+                /*
+                 * 距離による状態
+                 */
+                boolean overdueByDistance =
+                        nextDistance > 0.0
+                                && currentTotalDistance
+                                >= nextDistance;
+
+                /*
+                 * 残り50km以下なら期限間近
+                 */
+                boolean comingSoonByDistance =
+                        nextDistance > currentTotalDistance
+                                && nextDistance
+                                - currentTotalDistance
+                                <= 50000.0;
+
+                /*
+                 * 赤を最優先、次に黄色、通常は灰色
+                 */
+                if (overdueByDate
+                        || overdueByDistance) {
+
+                    // 期限超過：薄い赤
+                    recordView.setBackgroundColor(
+                            Color.rgb(
+                                    255,
+                                    205,
+                                    210
+                            )
+                    );
+
+                } else if (comingSoonByDate
+                        || comingSoonByDistance) {
+
+                    // 期限間近：薄い黄色
+                    recordView.setBackgroundColor(
+                            Color.rgb(
+                                    255,
+                                    249,
+                                    196
+                            )
+                    );
+
+                } else {
+                    // 通常
+                    recordView.setBackgroundColor(
+                            Color.rgb(
+                                    235,
+                                    235,
+                                    235
+                            )
+                    );
+                }
 
                 recordView.setPadding(
                         dpInt(12),
@@ -5078,6 +5335,67 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * メンテナンス種類ごとの距離初期値
+     */
+    private String getDefaultMaintenanceDistanceInterval(
+            String maintenanceType
+    ) {
+        switch (maintenanceType) {
+            case "チェーン":
+                return "300 km後";
+
+            case "ブレーキ":
+                return "500 km後";
+
+            case "タイヤ":
+                return "1,000 km後";
+
+            case "空気圧":
+            case "清掃":
+            case "ライト":
+            default:
+                return "なし";
+        }
+    }
+
+    /**
+     * 「500 km後」などの選択値をメートルへ変換する
+     */
+    private double getMaintenanceDistanceMeters(
+            String intervalLabel
+    ) {
+        if (intervalLabel == null) {
+            return 0.0;
+        }
+
+        switch (intervalLabel) {
+            case "100 km後":
+                return 100000.0;
+
+            case "300 km後":
+                return 300000.0;
+
+            case "500 km後":
+                return 500000.0;
+
+            case "1,000 km後":
+                return 1000000.0;
+
+            case "2,000 km後":
+                return 2000000.0;
+
+            case "3,000 km後":
+                return 3000000.0;
+
+            case "5,000 km後":
+                return 5000000.0;
+
+            default:
+                return 0.0;
+        }
+    }
+
     //次回予定日を計算する関数
     private String calculateNextMaintenanceDate(
             String baseDateKey,
@@ -5153,6 +5471,61 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * statistics.jsonから現在の累計走行距離を取得する
+     * 単位はメートル
+     */
+    private double getCurrentTotalDistanceMeters() {
+        try {
+            File file =
+                    new File(
+                            getFilesDir(),
+                            "statistics.json"
+                    );
+
+            if (!file.exists()) {
+                return 0.0;
+            }
+
+            JSONObject rootJson =
+                    new JSONObject(
+                            readTextFile(file)
+                    );
+
+            JSONObject allTimeJson =
+                    rootJson.optJSONObject(
+                            "allTime"
+                    );
+
+            if (allTimeJson == null) {
+                return 0.0;
+            }
+
+            JSONObject summaryJson =
+                    allTimeJson.optJSONObject(
+                            "summary"
+                    );
+
+            if (summaryJson == null) {
+                return 0.0;
+            }
+
+            return summaryJson.optDouble(
+                    "totalDistance",
+                    0.0
+            );
+
+        } catch (Exception e) {
+            Log.e(
+                    "MAINTENANCE",
+                    "累計走行距離の取得に失敗しました",
+                    e
+            );
+
+            return 0.0;
+        }
+    }
+
     //JSONの読み書きを共通関数
     //読み込み
     private JSONObject loadMaintenanceJson()
@@ -5222,7 +5595,8 @@ public class MainActivity extends AppCompatActivity {
             String title,
             String memo,
             int cost,
-            String nextInterval
+            String nextInterval,
+            String nextDistanceIntervalLabel
     ) {
         if (recordId < 0) {
             Toast.makeText(
@@ -5274,6 +5648,29 @@ public class MainActivity extends AppCompatActivity {
                                 nextInterval
                         );
 
+                /*
+                 * 編集しても、メンテナンス実施時点の距離は
+                 * 基本的に変更しない
+                 */
+                double distanceAtMaintenance =
+                        recordJson.optDouble(
+                                "distanceAtMaintenance",
+                                getCurrentTotalDistanceMeters()
+                        );
+
+                double nextDistanceInterval =
+                        getMaintenanceDistanceMeters(
+                                nextDistanceIntervalLabel
+                        );
+
+                double nextDistance = 0.0;
+
+                if (nextDistanceInterval > 0.0) {
+                    nextDistance =
+                            distanceAtMaintenance
+                                    + nextDistanceInterval;
+                }
+
                 recordJson.put("type", type);
                 recordJson.put("title", title);
                 recordJson.put("memo", memo);
@@ -5285,6 +5682,26 @@ public class MainActivity extends AppCompatActivity {
                 recordJson.put(
                         "nextDate",
                         nextDate
+                );
+
+                recordJson.put(
+                        "distanceAtMaintenance",
+                        distanceAtMaintenance
+                );
+
+                recordJson.put(
+                        "nextDistanceInterval",
+                        nextDistanceInterval
+                );
+
+                recordJson.put(
+                        "nextDistanceIntervalLabel",
+                        nextDistanceIntervalLabel
+                );
+
+                recordJson.put(
+                        "nextDistance",
+                        nextDistance
                 );
 
                 updated = true;
@@ -5487,6 +5904,76 @@ public class MainActivity extends AppCompatActivity {
 
         } catch (Exception e) {
             return dateKey;
+        }
+    }
+
+    /**
+     * 指定日まであと何日かを返す
+     *
+     * 正数：予定日までの日数
+     * 0：今日
+     * 負数：予定日を過ぎている
+     */
+    private long getDaysUntilMaintenanceDate(
+            String dateKey
+    ) {
+        if (dateKey == null || dateKey.isEmpty()) {
+            return Long.MAX_VALUE;
+        }
+
+        try {
+            SimpleDateFormat format =
+                    new SimpleDateFormat(
+                            "yyyy-MM-dd",
+                            Locale.JAPAN
+                    );
+
+            format.setLenient(false);
+
+            Date targetDate =
+                    format.parse(dateKey);
+
+            if (targetDate == null) {
+                return Long.MAX_VALUE;
+            }
+
+            Calendar today =
+                    Calendar.getInstance(
+                            Locale.JAPAN
+                    );
+
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+
+            Calendar target =
+                    Calendar.getInstance(
+                            Locale.JAPAN
+                    );
+
+            target.setTime(targetDate);
+
+            target.set(Calendar.HOUR_OF_DAY, 0);
+            target.set(Calendar.MINUTE, 0);
+            target.set(Calendar.SECOND, 0);
+            target.set(Calendar.MILLISECOND, 0);
+
+            long difference =
+                    target.getTimeInMillis()
+                            - today.getTimeInMillis();
+
+            return difference
+                    / (24L * 60L * 60L * 1000L);
+
+        } catch (Exception e) {
+            Log.e(
+                    "MAINTENANCE",
+                    "日付期限の計算に失敗しました",
+                    e
+            );
+
+            return Long.MAX_VALUE;
         }
     }
 }
