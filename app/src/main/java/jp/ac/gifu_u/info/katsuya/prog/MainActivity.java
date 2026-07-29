@@ -1052,7 +1052,6 @@ public class MainActivity extends AppCompatActivity {
             );
         }
         changeMode(AppMode.MAP);//マップモードを地図に変更する
-        runMaintenanceReminderTest();//test
     }
 
 
