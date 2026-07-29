@@ -28,7 +28,11 @@ import java.util.Date;
 import java.util.Locale;
 
 /*
- * メンテナンスをするための通知チャンネル
+ * メンテナンス時期を確認し、条件を満たした場合に通知を表示するWorker
+ *
+ * Workerは画面とは独立してバックグラウンドで実行される。
+ * MainActivityからWorkManagerに登録され、1日1回程度このクラスのdoWork()が呼ばれる。
+ *
  *
  * メンテナンス通知を出す条件
  *
@@ -49,20 +53,35 @@ import java.util.Locale;
 public class MaintenanceReminderWorker
         extends Worker {
 
+    //Logcatへログを出力するときに使用するタグ
     private static final String TAG =
             "MAINTENANCE_WORKER";
 
+    /**
+     * Workerのコンストラクタ
+     *
+     * context：アプリのファイルや通知機能を利用するためのContext
+     * workerParams：WorkManagerから渡されるWorkerの実行情報
+     */
     public MaintenanceReminderWorker(
             @NonNull Context context,
             @NonNull WorkerParameters workerParams
     ) {
+        //親クラスであるWorkerへ必要な情報を渡す
         super(context, workerParams);
     }
 
+    /**
+     * WorkManagerによって呼び出されるメイン処理
+     *
+     * maintenance.jsonの全記録を確認し、
+     * 日付条件または距離条件を満たす記録に対して通知を表示する。
+     */
     @NonNull
     @Override
     public Result doWork() {
         try {
+            //アプリ専用領域にあるmaintenance.jsonを指定
             File maintenanceFile =
                     new File(
                             getApplicationContext()
@@ -70,10 +89,12 @@ public class MaintenanceReminderWorker
                             "maintenance.json"
                     );
 
+            //メンテナンス記録がまだ一件も保存されていない場合は何もせず正常終了
             if (!maintenanceFile.exists()) {
                 return Result.success();
             }
 
+            //maintenance.jsonを文字列として読み込み、JSONObjectへ変換
             JSONObject rootJson =
                     new JSONObject(
                             readTextFile(
@@ -81,45 +102,57 @@ public class MaintenanceReminderWorker
                             )
                     );
 
+            //JSON内のメンテナンス記録一覧であるrecords配列を取得
             JSONArray recordsArray =
                     rootJson.optJSONArray(
                             "records"
                     );
 
+            //records配列が存在しない場合も通知対象がないため正常終了
             if (recordsArray == null) {
                 return Result.success();
             }
 
+            //statistics.jsonから、現在までの累計走行距離をメートル単位で取得
             double currentDistance =
                     getCurrentTotalDistanceMeters();
 
+            //通知済みフラグを書き換えたかを記録する
             boolean jsonChanged = false;
 
+            //保存されているすべてのメンテナンス記録を順番に確認
             for (int i = 0;
                  i < recordsArray.length();
                  i++) {
 
+                //i番目のメンテナンス記録を取得
                 JSONObject recordJson =
                         recordsArray.getJSONObject(i);
 
+                //次回メンテナンス予定日を取得
+                //未設定の場合は空文字列
                 String nextDate =
                         recordJson.optString(
                                 "nextDate",
                                 ""
                         );
 
+                //次回メンテナンスを行う累計走行距離の目安を取得
+                //単位はメートル。未設定の場合は0
                 double nextDistance =
                         recordJson.optDouble(
                                 "nextDistance",
                                 0.0
                         );
 
+                //日付による通知をすでに送信したかを取得
                 boolean dateNotificationSent =
                         recordJson.optBoolean(
                                 "dateNotificationSent",
                                 false
                         );
 
+                //距離による通知をすでに送信したかを取得
                 boolean distanceNotificationSent =
                         recordJson.optBoolean(
                                 "distanceNotificationSent",
@@ -135,6 +168,9 @@ public class MaintenanceReminderWorker
                                 nextDate
                         );
 
+                //日付通知の条件
+                //未通知、予定日が設定済み、予定日まで7日以内のすべてを満たす
+                //daysUntilが負数の場合も「7以下」なので、予定日超過として通知される
                 boolean notifyByDate =
                         !dateNotificationSent
                                 && !nextDate.isEmpty()
@@ -148,17 +184,22 @@ public class MaintenanceReminderWorker
                         nextDistance
                                 - currentDistance;
 
+                //距離通知の条件
+                //未通知、距離目安が設定済み、残り50km以内のすべてを満たす
+                //remainingDistanceが負数の場合も、距離目安を超過したものとして通知される
                 boolean notifyByDistance =
                         !distanceNotificationSent
                                 && nextDistance > 0.0
                                 && remainingDistance
                                 <= 50000.0;
 
+                //日付条件と距離条件の両方を満たさない記録は次の記録へ進む
                 if (!notifyByDate
                         && !notifyByDistance) {
                     continue;
                 }
 
+                //条件を満たしたメンテナンス記録について通知を表示
                 showMaintenanceNotification(
                         recordJson,
                         notifyByDate,
@@ -167,6 +208,8 @@ public class MaintenanceReminderWorker
                         remainingDistance
                 );
 
+                //同じ日付通知を繰り返さないよう通知済みに変更
+                //日付条件で通知する場合、予定日までの日数を本文へ追加
                 if (notifyByDate) {
                     recordJson.put(
                             "dateNotificationSent",
@@ -174,6 +217,8 @@ public class MaintenanceReminderWorker
                     );
                 }
 
+                //同じ距離通知を繰り返さないよう通知済みに変更
+                //距離条件で通知する場合、残り距離または超過距離を本文へ追加
                 if (notifyByDistance) {
                     recordJson.put(
                             "distanceNotificationSent",
@@ -184,6 +229,7 @@ public class MaintenanceReminderWorker
                 jsonChanged = true;
             }
 
+            //通知済みフラグを変更した場合だけmaintenance.jsonを上書き保存
             if (jsonChanged) {
                 writeJsonFile(
                         maintenanceFile,
@@ -191,6 +237,7 @@ public class MaintenanceReminderWorker
                 );
             }
 
+            //すべての確認処理が正常に完了
             return Result.success();
 
         } catch (Exception e) {
@@ -200,6 +247,7 @@ public class MaintenanceReminderWorker
                     e
             );
 
+            //一時的な失敗としてWorkManagerへ再実行を依頼
             return Result.retry();
         }
     }
@@ -214,6 +262,7 @@ public class MaintenanceReminderWorker
             long daysUntil,
             double remainingDistance
     ) {
+        //Activityではなくアプリ全体で利用できるContextを取得
         Context context =
                 getApplicationContext();
 
@@ -230,18 +279,21 @@ public class MaintenanceReminderWorker
             return;
         }
 
+        //メンテナンスの種類を取得
         String type =
                 recordJson.optString(
                         "type",
                         "自転車"
                 );
 
+        //登録されている具体的な作業内容を取得
         String maintenanceTitle =
                 recordJson.optString(
                         "title",
                         "メンテナンス"
                 );
 
+        //日付・距離の状態に応じて通知本文を作成
         String message =
                 createNotificationMessage(
                         type,
@@ -270,12 +322,14 @@ public class MaintenanceReminderWorker
                         | Intent.FLAG_ACTIVITY_CLEAR_TOP
         );
 
+        //メンテナンス記録ごとに異なる通知IDを作るため、記録IDを取得
         long recordId =
                 recordJson.optLong(
                         "id",
                         System.currentTimeMillis()
                 );
 
+        //通知をタップしたときにMainActivityを開くためのPendingIntentを作成
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(
                         context,
@@ -286,6 +340,7 @@ public class MaintenanceReminderWorker
                                 | PendingIntent.FLAG_IMMUTABLE
                 );
 
+        //通知に表示するアイコン、タイトル、本文などを設定
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(
                         context,
@@ -320,12 +375,14 @@ public class MaintenanceReminderWorker
                                 pendingIntent
                         );
 
+        //Androidの通知機能を管理するNotificationManagerを取得
         NotificationManager manager =
                 (NotificationManager)
                         context.getSystemService(
                                 Context.NOTIFICATION_SERVICE
                         );
 
+        //NotificationManagerを取得できた場合に通知を表示
         if (manager != null) {
             manager.notify(
                     (int) (recordId
@@ -345,6 +402,7 @@ public class MaintenanceReminderWorker
             long daysUntil,
             double remainingDistance
     ) {
+        //条件に応じて文字列を後ろへ追加するためStringBuilderを使用
         StringBuilder message =
                 new StringBuilder();
 
@@ -395,6 +453,7 @@ public class MaintenanceReminderWorker
             }
         }
 
+        //完成した通知本文をStringとして返す
         return message.toString();
     }
 
@@ -404,18 +463,21 @@ public class MaintenanceReminderWorker
     private long getDaysUntilDate(
             String dateKey
     ) {
+        //予定日が未設定の場合は通知条件を満たさないよう非常に大きな値を返す
         if (dateKey == null
                 || dateKey.isEmpty()) {
             return Long.MAX_VALUE;
         }
 
         try {
+            //JSONの「yyyy-MM-dd」形式をDateへ変換するための書式
             SimpleDateFormat format =
                     new SimpleDateFormat(
                             "yyyy-MM-dd",
                             Locale.JAPAN
                     );
 
+            //存在しない日付を自動補正せず、正しくない日付として扱う
             format.setLenient(false);
 
             Date date =
@@ -425,6 +487,7 @@ public class MaintenanceReminderWorker
                 return Long.MAX_VALUE;
             }
 
+            //今日の日付を取得
             Calendar today =
                     Calendar.getInstance(
                             Locale.JAPAN
@@ -438,6 +501,7 @@ public class MaintenanceReminderWorker
             today.set(Calendar.SECOND, 0);
             today.set(Calendar.MILLISECOND, 0);
 
+            //次回メンテナンス予定日をCalendarとして取得
             Calendar target =
                     Calendar.getInstance(
                             Locale.JAPAN
@@ -452,6 +516,7 @@ public class MaintenanceReminderWorker
             target.set(Calendar.SECOND, 0);
             target.set(Calendar.MILLISECOND, 0);
 
+            //予定日と今日の差をミリ秒で求め、1日分のミリ秒で割って日数へ変換
             return (
                     target.getTimeInMillis()
                             - today.getTimeInMillis()
@@ -463,15 +528,18 @@ public class MaintenanceReminderWorker
             );
 
         } catch (Exception e) {
+            //日付形式が不正な場合は通知対象にしない
             return Long.MAX_VALUE;
         }
     }
 
     /**
      * statistics.jsonから累計距離を取得する
+     * 戻り値の単位はメートル
      */
     private double getCurrentTotalDistanceMeters() {
         try {
+            //アプリ専用領域にあるstatistics.jsonを指定
             File file =
                     new File(
                             getApplicationContext()
@@ -479,15 +547,18 @@ public class MaintenanceReminderWorker
                             "statistics.json"
                     );
 
+            //統計ファイルがなければ累計距離を0mとして扱う
             if (!file.exists()) {
                 return 0.0;
             }
 
+            //statistics.jsonを読み込んでJSONObjectへ変換
             JSONObject rootJson =
                     new JSONObject(
                             readTextFile(file)
                     );
 
+            //全期間の統計データであるallTimeを取得
             JSONObject allTimeJson =
                     rootJson.optJSONObject(
                             "allTime"
@@ -497,6 +568,7 @@ public class MaintenanceReminderWorker
                 return 0.0;
             }
 
+            //全期間データ内の集計結果summaryを取得
             JSONObject summaryJson =
                     allTimeJson.optJSONObject(
                             "summary"
@@ -506,6 +578,7 @@ public class MaintenanceReminderWorker
                 return 0.0;
             }
 
+            //累計走行距離totalDistanceをメートル単位で返す
             return summaryJson.optDouble(
                     "totalDistance",
                     0.0
@@ -522,24 +595,32 @@ public class MaintenanceReminderWorker
         }
     }
 
+    /**
+     * 指定したテキストファイルをUTF-8で読み込む共通関数
+     */
     private String readTextFile(
             File file
     ) throws Exception {
+        //ファイルを読み込むためのストリームを開く
         FileInputStream fis =
                 new FileInputStream(file);
 
+        //ファイルサイズと同じ長さのバイト配列を用意
         byte[] data =
                 new byte[(int) file.length()];
 
+        //ファイルの内容をバイト配列へ読み込み、実際に読めた長さを保存
         int readLength =
                 fis.read(data);
 
+        //読み込み後はファイルを閉じる
         fis.close();
 
         if (readLength < 0) {
             return "";
         }
 
+        //読み込んだバイト列をUTF-8の文字列へ変換して返す
         return new String(
                 data,
                 0,
@@ -548,13 +629,18 @@ public class MaintenanceReminderWorker
         );
     }
 
+    /**
+     * JSONObjectを整形したJSONとしてファイルへ保存する共通関数
+     */
     private void writeJsonFile(
             File file,
             JSONObject rootJson
     ) throws Exception {
+        //指定されたファイルを上書き保存するためのストリームを開く
         FileOutputStream fos =
                 new FileOutputStream(file);
 
+        //インデント幅4でJSONを整形し、UTF-8でファイルへ書き込む
         fos.write(
                 rootJson
                         .toString(4)
@@ -563,6 +649,7 @@ public class MaintenanceReminderWorker
                         )
         );
 
+        //書き込み後はファイルを閉じる
         fos.close();
     }
 }

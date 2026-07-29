@@ -30,8 +30,23 @@ import java.util.Locale;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * 画面がバックグラウンドに移動しても走行位置を記録し続けるService
+ *
+ * 主な役割
+ * ・GPSとネットワークから位置情報を取得する
+ * ・GPSの誤差や停止中の小さなブレを除外する
+ * ・走行ルートをJSONファイルへ保存する
+ * ・走行終了後に統計データを更新する
+ * ・MainActivityへ現在位置や記録中ルートをBroadcastで送る
+ */
 public class LocationTrackingService extends Service {
-    //統計データ計算用の内部クラス
+    /**
+     * 1回の走行から計算した統計値をまとめて保持する内部クラス
+     *
+     * JSONへ直接保存する前に、移動時間、停止時間、最高速度、
+     * 速度帯ごとの時間などを一時的に保存するために使用する。
+     */
     private static class RideStatistics {
         long rideTimeSec;
 
@@ -55,36 +70,56 @@ public class LocationTrackingService extends Service {
         double time30Over;
     }
 
+    //MainActivityから走行記録開始を指示するときのAction
     public static final String ACTION_START = "jp.ac.gifu_u.info.katsuya.prog.ACTION_START_TRACKING";
+    //MainActivityから走行記録停止を指示するときのAction
     public static final String ACTION_STOP = "jp.ac.gifu_u.info.katsuya.prog.ACTION_STOP_TRACKING";
 
+    //フォアグラウンドサービスの通知チャンネルID
     private static final String CHANNEL_ID = "tracking_channel";
+    //走行記録中の常駐通知に使用する通知ID
     private static final int NOTIFICATION_ID = 1001;
 
+    //GPSやネットワーク位置情報を管理するクラス
     private LocationManager locationManager;
+    //位置情報が更新されたときに呼ばれるリスナー
     private LocationListener locationListener;
 
+    //記録したすべての走行地点を保存するリスト
     private ArrayList<RoutePoint> routePoints = new ArrayList<>();
 
+    //現在走行記録中かどうかを示すフラグ
     private boolean isRecording = false;
+    //走行記録の開始時刻
     private long startTime = 0;
+    //走行記録の終了時刻
     private long endTime = 0;
+    //現在の走行における累計距離。単位はメートル
     private double totalDistance = 0.0;
+    //直前に保存した走行地点。区間距離や速度の計算に使用する
     private RoutePoint lastRoutePoint = null;
 
+    //最後にGPSから位置情報を受信した時刻
     private long lastGpsLocationTime = 0;
 
+    //記録に使用できる最大位置誤差。30mを超える位置は除外
     private static final float RECORDING_MAX_ACCURACY = 30.0f;
+    //自転車として異常とみなす区間速度。これを超える場合はGPSの飛びとして除外
     private static final double MAX_REASONABLE_SPEED_KMH = 60.0;
+    //停止中のGPSブレとみなす移動距離
     private static final double STOP_JITTER_DISTANCE = 8.0;
+    //停止中のGPSブレ判定に使用するGPS速度。単位はm/s
     private static final float STOP_JITTER_SPEED = 0.8f;
 
+    //新しい記録地点をMainActivityへ送るBroadcastのAction
     public static final String ACTION_LOCATION_UPDATE =
             "jp.ac.gifu_u.info.katsuya.prog.ACTION_LOCATION_UPDATE";
 
+    //MainActivityが現在までの記録ルートを要求するときのAction
     public static final String ACTION_REQUEST_ROUTE =
             "jp.ac.gifu_u.info.katsuya.prog.ACTION_REQUEST_ROUTE";
 
+    //ServiceからMainActivityへルート一覧を返すBroadcastのAction
     public static final String ACTION_ROUTE_SNAPSHOT =
             "jp.ac.gifu_u.info.katsuya.prog.ACTION_ROUTE_SNAPSHOT";
 
@@ -94,27 +129,41 @@ public class LocationTrackingService extends Service {
     public static final String EXTRA_LON = "extra_lon";
     public static final String EXTRA_DISTANCE = "extra_distance";
 
+    /**
+     * Serviceが初めて作成されたときに1回だけ呼ばれる
+     */
     @Override
     public void onCreate() {
         super.onCreate();
 
+        //Androidの位置情報サービスを取得
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        //走行記録中の常駐通知に使用するチャンネルを作成
         createNotificationChannel();
 
+        //位置情報が更新されたときの処理を定義
         locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
+                //受信した位置情報の検査、距離計算、保存を行う
                 handleLocation(location);
             }
         };
     }
 
+    /**
+     * startServiceまたはstartForegroundServiceでServiceが呼ばれるたびに実行される
+     * IntentのActionに応じて開始、停止、ルート送信を切り替える。
+     */
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        //ServiceがAndroidによって再生成され、Intentが渡されない場合の対策
         if (intent == null || intent.getAction() == null) {
+            //Serviceが強制終了された場合にAndroidへ再生成を依頼する
             return START_STICKY;
         }
 
+        //Actionに応じて対応する処理を実行
         if (ACTION_START.equals(intent.getAction())) {
             startTracking();
         } else if (ACTION_STOP.equals(intent.getAction())) {
@@ -126,11 +175,16 @@ public class LocationTrackingService extends Service {
         return START_STICKY;
     }
 
+    /**
+     * 走行記録を開始する
+     */
     private void startTracking() {
+        //すでに記録中なら二重開始しない
         if (isRecording) {
             return;
         }
 
+        //前回の走行データを初期化し、新しい記録を開始
         isRecording = true;
         routePoints.clear();
         totalDistance = 0.0;
@@ -138,11 +192,13 @@ public class LocationTrackingService extends Service {
         startTime = System.currentTimeMillis();
         lastGpsLocationTime = 0;
 
+        //バックグラウンドでも記録を継続するための常駐通知を作成
         Notification notification = createNotification(
                 "走行記録中",
                 "位置情報を記録しています"
         );
 
+        //Android 10以降では位置情報を使うフォアグラウンドサービスとして開始
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                     NOTIFICATION_ID,
@@ -153,12 +209,17 @@ public class LocationTrackingService extends Service {
             startForeground(NOTIFICATION_ID, notification);
         }
 
+        //GPSとネットワーク位置情報の取得を開始
         startLocationUpdates();
 
         Log.d("TRACKING_SERVICE", "記録開始");
     }
 
+    /**
+     * 走行記録を停止し、ルート保存と統計更新を行う
+     */
     private void stopTracking() {
+        //記録中でなければServiceだけを終了
         if (!isRecording) {
             stopSelf();
             return;
@@ -167,11 +228,14 @@ public class LocationTrackingService extends Service {
         isRecording = false;
         endTime = System.currentTimeMillis();
 
+        //位置情報更新を停止
         stopLocationUpdates();
 
+        //記録したルートをJSONファイルとして保存
         boolean routeSaved = saveRouteToJson();
 
         if (routeSaved) {
+            //ルート保存に成功した場合のみ統計データを更新
             boolean statisticsUpdated = updateStatistics();
 
             if (statisticsUpdated) {
@@ -189,11 +253,16 @@ public class LocationTrackingService extends Service {
 
         Log.d("TRACKING_SERVICE", "記録停止");
 
+        //常駐通知を削除し、Serviceを終了
         stopForeground(true);
         stopSelf();
     }
 
+    /**
+     * GPSとネットワーク位置情報の更新要求を登録する
+     */
     private void startLocationUpdates() {
+        //位置情報権限があるか確認
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -204,6 +273,7 @@ public class LocationTrackingService extends Service {
         }
 
         try {
+            //GPS位置情報を3秒または5m移動ごとに要求
             locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
                     3000,
@@ -211,6 +281,7 @@ public class LocationTrackingService extends Service {
                     locationListener
             );
 
+            //ネットワーク位置情報も3秒または5m移動ごとに要求
             locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
                     3000,
@@ -222,20 +293,29 @@ public class LocationTrackingService extends Service {
         }
     }
 
+    /**
+     * 登録済みの位置情報更新を解除する
+     */
     private void stopLocationUpdates() {
         if (locationManager != null && locationListener != null) {
             locationManager.removeUpdates(locationListener);
         }
     }
 
+    /**
+     * 受信した位置情報を検査し、走行地点として保存する
+     */
     private void handleLocation(Location location) {
+        //位置情報を取得した提供元を確認
         String provider = location.getProvider();
         long nowTime = System.currentTimeMillis();
 
+        //GPSを受信した時刻を保存
         if (LocationManager.GPS_PROVIDER.equals(provider)) {
             lastGpsLocationTime = nowTime;
         }
 
+        //直近10秒以内にGPSを受信している場合は精度の低いNETWORKを使用しない
         if (LocationManager.NETWORK_PROVIDER.equals(provider)) {
             if (nowTime - lastGpsLocationTime < 10000) {
                 return;
@@ -250,6 +330,7 @@ public class LocationTrackingService extends Service {
             return;
         }
 
+        //記録用フィルターで異常な位置情報と判定された場合は無視
         if (shouldIgnoreLocationForRecording(location)) {
             return;
         }
@@ -260,6 +341,7 @@ public class LocationTrackingService extends Service {
         long time = System.currentTimeMillis();
         float speed = location.hasSpeed() ? location.getSpeed() : 0.0f;
 
+        //前回地点がある場合、前回地点から今回地点までの距離を加算
         if (lastRoutePoint != null) {
             float[] result = new float[1];
 
@@ -274,6 +356,7 @@ public class LocationTrackingService extends Service {
             totalDistance += result[0];
         }
 
+        //緯度、経度、時刻、GPS速度、累計距離を1つのRoutePointにまとめる
         RoutePoint routePoint = new RoutePoint(
                 lat,
                 lon,
@@ -285,6 +368,7 @@ public class LocationTrackingService extends Service {
         routePoints.add(routePoint);
         lastRoutePoint = routePoint;
 
+        //MainActivityへ新しい記録地点を送信
         sendLocationUpdateToActivity(lat, lon, totalDistance);
 
         Log.d("TRACKING_SERVICE",
@@ -293,12 +377,20 @@ public class LocationTrackingService extends Service {
                         ", distance=" + totalDistance);
     }
 
+    /**
+     * 位置情報を走行記録へ使用してよいか判定する
+     *
+     * true：異常または停止中のブレなので無視する
+     * false：走行地点として記録する
+     */
     private boolean shouldIgnoreLocationForRecording(Location location) {
+        //位置誤差が30mを超える場合は精度不足として除外
         if (location.hasAccuracy() && location.getAccuracy() > RECORDING_MAX_ACCURACY) {
             Log.d("GPS_FILTER", "精度が悪いため無視: accuracy=" + location.getAccuracy());
             return true;
         }
 
+        //最初の地点は比較対象がないため記録する
         if (lastRoutePoint == null) {
             return false;
         }
@@ -323,8 +415,10 @@ public class LocationTrackingService extends Service {
             return true;
         }
 
+        //前回地点から今回地点までの区間速度をkm/hで計算
         double sectionSpeedKmh = (distance / diffTime) * 3.6;
 
+        //60km/hを超える場合はGPS座標が飛んだものとして除外
         if (sectionSpeedKmh > MAX_REASONABLE_SPEED_KMH) {
             Log.d("GPS_FILTER", "ワープ判定で無視: speed="
                     + sectionSpeedKmh + " km/h, distance=" + distance);
@@ -333,6 +427,7 @@ public class LocationTrackingService extends Service {
 
         float gpsSpeed = location.hasSpeed() ? location.getSpeed() : 0.0f;
 
+        //GPS速度が低く移動距離も小さい場合は停止中の位置ブレとして除外
         if (gpsSpeed < STOP_JITTER_SPEED && distance < STOP_JITTER_DISTANCE) {
             Log.d("GPS_FILTER", "停止中のブレとして無視: distance="
                     + distance + ", gpsSpeed=" + gpsSpeed);
@@ -342,6 +437,12 @@ public class LocationTrackingService extends Service {
         return false;
     }
 
+    /**
+     * 現在の走行ルートをroutesフォルダへJSON形式で保存する
+     *
+     * 保存成功：true
+     * 保存失敗または記録点不足：false
+     */
     private boolean saveRouteToJson() {
         try {
             if (routePoints.size() < 2) {
@@ -349,6 +450,7 @@ public class LocationTrackingService extends Service {
                 return false;
             }
 
+            //走行全体を保存するJSONオブジェクトを作成
             JSONObject routeJson = new JSONObject();
 
             routeJson.put("startTime", startTime);
@@ -364,8 +466,10 @@ public class LocationTrackingService extends Service {
 
             routeJson.put("averageSpeed", averageSpeed);
 
+            //各記録地点を保存するJSON配列を作成
             JSONArray pointsArray = new JSONArray();
 
+            //すべてのRoutePointをJSONObjectへ変換して配列へ追加
             for (RoutePoint p : routePoints) {
                 JSONObject pointJson = new JSONObject();
 
@@ -380,11 +484,13 @@ public class LocationTrackingService extends Service {
 
             routeJson.put("points", pointsArray);
 
+            //走行開始時刻を使って重複しにくいファイル名を作成
             String fileName = "route_" +
                     new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.JAPAN)
                             .format(new Date(startTime)) +
                     ".json";
 
+            //アプリ専用領域内のroutesフォルダを指定
             File routeDir = new File(getFilesDir(), "routes");
 
             if (!routeDir.exists()) {
@@ -406,6 +512,9 @@ public class LocationTrackingService extends Service {
         return true;
     }
 
+    /**
+     * 走行記録中に表示する常駐通知を作成する
+     */
     private Notification createNotification(String title, String text) {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
@@ -416,6 +525,9 @@ public class LocationTrackingService extends Service {
                 .build();
     }
 
+    /**
+     * Android 8以降で必要な通知チャンネルを作成する
+     */
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationChannel channel = new NotificationChannel(
@@ -431,17 +543,26 @@ public class LocationTrackingService extends Service {
         }
     }
 
+    /**
+     * Service破棄時に位置情報更新を確実に解除する
+     */
     @Override
     public void onDestroy() {
         stopLocationUpdates();
         super.onDestroy();
     }
 
+    /**
+     * このServiceはbindServiceではなくstartService方式で使用するためnullを返す
+     */
     @Override
     public IBinder onBind(Intent intent) {
         return null;
     }
 
+    /**
+     * 新しい位置情報をBroadcastでMainActivityへ送信する
+     */
     private void sendLocationUpdateToActivity(double lat, double lon, double distance) {
         Intent intent = new Intent(ACTION_LOCATION_UPDATE);
         intent.setPackage(getPackageName());
@@ -453,6 +574,10 @@ public class LocationTrackingService extends Service {
         sendBroadcast(intent);
     }
 
+    /**
+     * 現在までに記録したルート全体をJSON文字列にしてMainActivityへ送信する
+     * 画面復帰時に記録中ルートを再表示するために使用する。
+     */
     private void sendRouteSnapshotToActivity() {
         try {
             JSONArray pointsArray = new JSONArray();
@@ -574,6 +699,9 @@ public class LocationTrackingService extends Service {
     }
 
     //統計データの更新に必要な値を計算する関数
+    /**
+     * 現在の1回分の走行データから統計値を計算する
+     */
     private RideStatistics calculateCurrentRideStatistics() {
         RideStatistics stats = new RideStatistics();
 
@@ -607,6 +735,7 @@ public class LocationTrackingService extends Service {
         double time25to30 = 0.0;
         double time30Over = 0.0;
 
+        //隣り合う記録地点ごとに区間速度と経過時間を計算
         for (int i = 0; i < routePoints.size(); i++) {
             RoutePoint now = routePoints.get(i);
 
@@ -637,7 +766,7 @@ public class LocationTrackingService extends Service {
             double sectionSpeedKmh =
                     sectionSpeed * 3.6;
 
-            // 2km/h未満を停止扱い
+            //区間速度が2km/h未満なら停止中として集計
             if (sectionSpeedKmh < 2.0) {
                 stopTime += diffTime;
                 currentStopTime += diffTime;
@@ -705,6 +834,7 @@ public class LocationTrackingService extends Service {
         stats.time25to30 = time25to30;
         stats.time30Over = time30Over;
 
+        //計算した統計値をまとめて返す
         return stats;
     }
 
@@ -716,10 +846,11 @@ public class LocationTrackingService extends Service {
         try {
             JSONObject rootJson = loadStatisticsJson();
 
+            //今回の走行から統計値を計算
             RideStatistics rideStats =
                     calculateCurrentRideStatistics();
 
-            // 走行開始時刻を基準に期間を決定
+            //走行開始日を基準に年、月、日の保存先キーを作成
             Date rideDate = new Date(startTime);
 
             String yearKey =
@@ -795,7 +926,7 @@ public class LocationTrackingService extends Service {
                     );
 
             // =========================
-            // 同じ走行データを4か所に反映
+            //今回の走行を全期間、年別、月別、日別の4か所へ加算
             // =========================
 
             updateStatisticsBlock(
@@ -841,7 +972,7 @@ public class LocationTrackingService extends Service {
         }
     }
 
-    //JSSOファイル補間関数
+    //JSONファイル補完関数
     /**
      * statistics.json全体の不足構造を補完する
      */
