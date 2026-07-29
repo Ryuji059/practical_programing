@@ -996,6 +996,15 @@
                     android:layout_height="match_parent"
                     android:layout_weight="1"
                     android:gravity="center"
+                    android:text="日"
+                    android:textColor="#C62828"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
                     android:text="月"
                     android:textColor="#000000"
                     android:textStyle="bold" />
@@ -1043,15 +1052,6 @@
                     android:gravity="center"
                     android:text="土"
                     android:textColor="#1565C0"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_weight="1"
-                    android:gravity="center"
-                    android:text="日"
-                    android:textColor="#C62828"
                     android:textStyle="bold" />
 
             </LinearLayout>
@@ -1130,7 +1130,7 @@
             android:layout_height="wrap_content"
             android:paddingStart="16dp"
             android:layout_marginBottom="8dp"
-            android:text="【この日のメンテナンス】"
+            android:text="【この日の実施記録・予定】"
             android:textSize="18sp"
             android:textStyle="bold"
             android:textColor="#000000" />

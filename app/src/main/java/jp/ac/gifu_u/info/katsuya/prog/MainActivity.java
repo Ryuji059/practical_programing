@@ -5036,13 +5036,31 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject recordJson =
                         recordsArray.getJSONObject(i);
 
+                // 実際にメンテナンスを行った日
                 String recordDate =
                         recordJson.optString(
                                 "date",
                                 ""
                         );
 
-                if (!dateKey.equals(recordDate)) {
+                // 次回メンテナンス予定日
+                String nextDate =
+                        recordJson.optString(
+                                "nextDate",
+                                ""
+                        );
+
+                // 選択日が実施日かどうか
+                boolean isRecordForDay =
+                        dateKey.equals(recordDate);
+
+                // 選択日が予定日かどうか
+                boolean isScheduleForDay =
+                        dateKey.equals(nextDate);
+
+                // 実施日でも予定日でもなければ表示しない
+                if (!isRecordForDay
+                        && !isScheduleForDay) {
                     continue;
                 }
 
@@ -5078,12 +5096,6 @@ public class MainActivity extends AppCompatActivity {
                                 0
                         );
 
-                String nextDate =
-                        recordJson.optString(
-                                "nextDate",
-                                ""
-                        );
-
                 String nextInterval =
                         recordJson.optString(
                                 "nextInterval",
@@ -5108,6 +5120,19 @@ public class MainActivity extends AppCompatActivity {
                 StringBuilder text =
                         new StringBuilder();
 
+                /*
+                 * 何として表示されているのかを明示
+                 */
+                if (isRecordForDay && isScheduleForDay) {
+                    text.append("【実施記録・予定】\n");
+
+                } else if (isRecordForDay) {
+                    text.append("【実施記録】\n");
+
+                } else {
+                    text.append("【予定】\n");
+                }
+
                 text.append("【")
                         .append(type)
                         .append("】\n");
@@ -5120,9 +5145,31 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 /*
-                 * 費用が入力されたときだけ表示
+                 * 予定として表示している場合は、
+                 * 元になった実施日を表示する
                  */
-                if (cost > 0) {
+                if (isScheduleForDay && !isRecordForDay) {
+                    if (!recordDate.isEmpty()) {
+                        text.append("\n前回実施日: ")
+                                .append(
+                                        formatMaintenanceDate(
+                                                recordDate
+                                        )
+                                );
+                    }
+
+                    text.append("\n予定日: ")
+                            .append(
+                                    formatMaintenanceDate(
+                                            nextDate
+                                    )
+                            );
+                }
+
+                /*
+                 * 費用は実施した日の記録だけに表示
+                 */
+                if (isRecordForDay && cost > 0) {
                     text.append("\n費用: ")
                             .append(
                                     String.format(
@@ -5134,9 +5181,9 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 /*
-                 * 次回予定が設定されているときだけ表示
+                 * 実施記録には、そこから計算された次回予定を表示
                  */
-                if (!nextDate.isEmpty()) {
+                if (isRecordForDay && !nextDate.isEmpty()) {
                     text.append("\n次回予定: ")
                             .append(
                                     formatMaintenanceDate(
@@ -5220,7 +5267,12 @@ public class MainActivity extends AppCompatActivity {
                                 <= 50000.0;
 
                 /*
-                 * 赤を最優先、次に黄色、通常は灰色
+                 * 色の優先順位
+                 *
+                 * 1. 期限超過：赤
+                 * 2. 予定として表示：黄色
+                 * 3. 期限間近：黄色
+                 * 4. 通常の実施記録：灰色
                  */
                 if (overdueByDate
                         || overdueByDistance) {
@@ -5231,6 +5283,18 @@ public class MainActivity extends AppCompatActivity {
                                     255,
                                     205,
                                     210
+                            )
+                    );
+
+                } else if (isScheduleForDay
+                        && !isRecordForDay) {
+
+                    // 予定：薄い黄色
+                    recordView.setBackgroundColor(
+                            Color.rgb(
+                                    255,
+                                    249,
+                                    196
                             )
                     );
 
@@ -5247,7 +5311,8 @@ public class MainActivity extends AppCompatActivity {
                     );
 
                 } else {
-                    // 通常
+
+                    // 通常の実施記録：灰色
                     recordView.setBackgroundColor(
                             Color.rgb(
                                     235,
@@ -5322,7 +5387,7 @@ public class MainActivity extends AppCompatActivity {
                 new TextView(this);
 
         emptyView.setText(
-                "この日のメンテナンス記録はありません"
+                "この日の実施記録・予定はありません"
         );
 
         emptyView.setTextSize(16);
@@ -6222,11 +6287,17 @@ public class MainActivity extends AppCompatActivity {
         firstDay.set(Calendar.MILLISECOND, 0);
 
         /*
-         * 月曜日を0、火曜日を1、…、日曜日を6に変換
+         * 日曜日を0、月曜日を1、…、土曜日を6に変換
+         *
+         * Calendar.SUNDAY    = 1
+         * Calendar.MONDAY    = 2
+         * ...
+         * Calendar.SATURDAY  = 7
          */
         int startPosition =
-                (firstDay.get(Calendar.DAY_OF_WEEK)
-                        + 5) % 7;
+                firstDay.get(
+                        Calendar.DAY_OF_WEEK
+                ) - 1;
 
         int maxDay =
                 firstDay.getActualMaximum(
@@ -6357,24 +6428,15 @@ public class MainActivity extends AppCompatActivity {
             }
 
             /*
-             * 土曜日・日曜日の文字色
-             *
              * position % 7
-             * 0=月、1=火、…、5=土、6=日
+             * 0=日、1=月、…、6=土
              */
             int weekColumn =
                     position % 7;
 
-            if (weekColumn == 5) {
-                dayView.setTextColor(
-                        Color.rgb(
-                                21,
-                                101,
-                                192
-                        )
-                );
+            if (weekColumn == 0) {
 
-            } else if (weekColumn == 6) {
+                // 日曜日：赤
                 dayView.setTextColor(
                         Color.rgb(
                                 198,
@@ -6383,7 +6445,20 @@ public class MainActivity extends AppCompatActivity {
                         )
                 );
 
+            } else if (weekColumn == 6) {
+
+                // 土曜日：青
+                dayView.setTextColor(
+                        Color.rgb(
+                                21,
+                                101,
+                                192
+                        )
+                );
+
             } else {
+
+                // 平日：黒
                 dayView.setTextColor(
                         Color.BLACK
                 );
