@@ -59,6 +59,12 @@ import java.util.Iterator;
 import android.widget.CalendarView;
 import android.widget.GridLayout;
 import java.util.HashSet;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
+import androidx.work.OneTimeWorkRequest;
+
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
     private enum AppMode {
@@ -271,6 +277,13 @@ public class MainActivity extends AppCompatActivity {
 
     // 現在選択している日付
     private String selectedMaintenanceDateKey;
+
+    //権限リクエスト用の変数
+    private static final int REQUEST_NOTIFICATION_PERMISSION = 200;
+
+    //通知チャンネル用ID変数
+    public static final String MAINTENANCE_CHANNEL_ID =
+            "maintenance_reminder";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -1018,8 +1031,28 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
+        createMaintenanceNotificationChannel();//通知チャンネルの作成
+        requestNotificationPermission();//権限リクエスト
+        scheduleMaintenanceReminder();//通知スケジュール確認
         startLocationUpdates();//GPS情報の取得を開始
+
+        boolean openMaintenance =
+                getIntent().getBooleanExtra(
+                        "openMaintenance",
+                        false
+                );
+
+        if (openMaintenance) {
+            changeMode(
+                    AppMode.MAINTENANCE
+            );
+        } else {
+            changeMode(
+                    AppMode.MAP
+            );
+        }
         changeMode(AppMode.MAP);//マップモードを地図に変更する
+        runMaintenanceReminderTest();//test
     }
 
 
@@ -1076,6 +1109,27 @@ public class MainActivity extends AppCompatActivity {
             unregisterReceiver(trackingReceiver);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(
+            Intent intent
+    ) {
+        super.onNewIntent(intent);
+
+        setIntent(intent);
+
+        boolean openMaintenance =
+                intent.getBooleanExtra(
+                        "openMaintenance",
+                        false
+                );
+
+        if (openMaintenance) {
+            changeMode(
+                    AppMode.MAINTENANCE
+            );
         }
     }
 
@@ -1181,14 +1235,51 @@ public class MainActivity extends AppCompatActivity {
             String[] permissions,
             int[] grantResults
     ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        super.onRequestPermissionsResult(
+                requestCode,
+                permissions,
+                grantResults
+        );
 
+        //位置情報の権限要求
         if (requestCode == 100) {
             if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    && grantResults[0]
+                    == PackageManager.PERMISSION_GRANTED) {
+
                 startLocationUpdates();
+
             } else {
-                Toast.makeText(this, "位置情報の権限が必要です", Toast.LENGTH_SHORT).show();
+                Toast.makeText(
+                        this,
+                        "位置情報の権限が必要です",
+                        Toast.LENGTH_SHORT
+                ).show();
+            }
+
+            return;
+        }
+
+        //通知の権限要求
+        if (requestCode
+                == REQUEST_NOTIFICATION_PERMISSION) {
+
+            if (grantResults.length > 0
+                    && grantResults[0]
+                    == PackageManager.PERMISSION_GRANTED) {
+
+                Toast.makeText(
+                        this,
+                        "メンテナンス通知を有効にしました",
+                        Toast.LENGTH_SHORT
+                ).show();
+
+            } else {
+                Toast.makeText(
+                        this,
+                        "通知が許可されていません",
+                        Toast.LENGTH_SHORT
+                ).show();
             }
         }
     }
@@ -4955,6 +5046,16 @@ public class MainActivity extends AppCompatActivity {
                     nextDistance
             );
 
+            recordJson.put(
+                    "dateNotificationSent",
+                    false
+            );
+
+            recordJson.put(
+                    "distanceNotificationSent",
+                    false
+            );
+
             recordsArray.put(recordJson);
 
             saveMaintenanceJson(rootJson);
@@ -5804,6 +5905,16 @@ public class MainActivity extends AppCompatActivity {
                         nextDistance
                 );
 
+                recordJson.put(
+                        "dateNotificationSent",
+                        false
+                );
+
+                recordJson.put(
+                        "distanceNotificationSent",
+                        false
+                );
+
                 updated = true;
                 break;
             }
@@ -6497,5 +6608,133 @@ public class MainActivity extends AppCompatActivity {
                     dayView
             );
         }
+    }
+
+    /**
+     * 通知権限を要求する関数
+     * Android 13以降で通知権限を要求する
+     */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return;
+        }
+
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        ActivityCompat.requestPermissions(
+                this,
+                new String[]{
+                        Manifest.permission.POST_NOTIFICATIONS
+                },
+                REQUEST_NOTIFICATION_PERMISSION
+        );
+    }
+
+    /**
+     * メンテナンス通知用チャンネルを作成する関数
+     */
+    private void createMaintenanceNotificationChannel() {
+        if (Build.VERSION.SDK_INT
+                < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        android.app.NotificationChannel channel =
+                new android.app.NotificationChannel(
+                        MAINTENANCE_CHANNEL_ID,
+                        "メンテナンスのお知らせ",
+                        android.app.NotificationManager
+                                .IMPORTANCE_DEFAULT
+                );
+
+        channel.setDescription(
+                "自転車のメンテナンス予定日や走行距離目安を通知します"
+        );
+
+        android.app.NotificationManager manager =
+                getSystemService(
+                        android.app.NotificationManager.class
+                );
+
+        if (manager != null) {
+            manager.createNotificationChannel(
+                    channel
+            );
+        }
+    }
+
+    /**
+     * メンテナンス確認をする関数
+     * メンテナンス確認を1日1回実行する
+     */
+    private void scheduleMaintenanceReminder() {
+        PeriodicWorkRequest request =
+                new PeriodicWorkRequest.Builder(
+                        MaintenanceReminderWorker.class,
+                        1,
+                        TimeUnit.DAYS
+                )
+                        .build();
+
+        WorkManager.getInstance(this)
+                .enqueueUniquePeriodicWork(
+                        "maintenance_reminder",
+                        ExistingPeriodicWorkPolicy.KEEP,
+                        request
+                );
+    }
+
+    //通知のテスト用関数
+    private void runMaintenanceReminderTest() {
+        OneTimeWorkRequest request =
+                new OneTimeWorkRequest.Builder(
+                        MaintenanceReminderWorker.class
+                )
+                        .addTag("maintenance_test")
+                        .build();
+
+        WorkManager workManager =
+                WorkManager.getInstance(this);
+
+        workManager.enqueue(request);
+
+        workManager.getWorkInfoByIdLiveData(
+                request.getId()
+        ).observe(this, workInfo -> {
+            if (workInfo == null) {
+                return;
+            }
+
+            Log.d(
+                    "MAINTENANCE_TEST",
+                    "Worker状態: "
+                            + workInfo.getState()
+            );
+
+            if (workInfo.getState().isFinished()) {
+                if (workInfo.getState()
+                        == androidx.work.WorkInfo.State.SUCCEEDED) {
+
+                    Toast.makeText(
+                            this,
+                            "通知チェックが完了しました",
+                            Toast.LENGTH_SHORT
+                    ).show();
+
+                } else {
+                    Toast.makeText(
+                            this,
+                            "通知チェックに失敗しました: "
+                                    + workInfo.getState(),
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            }
+        });
     }
 }
