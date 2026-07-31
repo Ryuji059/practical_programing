@@ -2,7 +2,6 @@ package jp.ac.gifu_u.info.katsuya.prog;
 
 import android.content.Intent;
 import android.os.Bundle;
-
 import androidx.appcompat.app.AppCompatActivity;
 import org.osmdroid.config.Configuration;//osmdroidの設定を行うクラス。
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;//地図データを使うため
@@ -40,7 +39,6 @@ import android.graphics.Point;
 import androidx.appcompat.app.AlertDialog;
 import android.widget.EditText;
 import android.widget.PopupMenu;
-import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -52,18 +50,15 @@ import androidx.core.content.ContextCompat;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import android.widget.AdapterView;
-
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Iterator;
-import android.widget.CalendarView;
 import android.widget.GridLayout;
 import java.util.HashSet;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 import androidx.work.OneTimeWorkRequest;
-
 import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
@@ -124,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
     private LocationManager locationManager;//位置管理用
     private Marker currentMarker;//現在位置のピン
     private GeoPoint currentPoint;//現在位置の保存
-    private Polyline routeLine;
+    private Polyline routeLine;//記録中の走行ルートを地図上に表示する線
     private boolean isRecording = false;//記録中かどうかのフラグ
     private ArrayList<RoutePoint> routePoints = new ArrayList<>();//記録したポイントの配列
     private long startTime = 0;//記録開始の時刻
@@ -139,8 +134,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView titleBar;//画面上部のタイトルバー
     private LinearLayout historyList;//走行履歴の表示用リスト
     // 履歴のフィルター・並び替え
-    private Spinner spinnerHistoryPeriod;
-    private Spinner spinnerHistorySort;
+    private Spinner spinnerHistoryPeriod;//履歴の表示期間を選ぶスピナー
+    private Spinner spinnerHistorySort;//履歴の並び順を選ぶスピナー
     private MapView historyMap;//走行履歴のルート表示用のMAP
     private View historyDetailLayout;//走行データの詳細表示用のレイアウト
     private Polyline historyRouteLine;//走行履歴のルートの線
@@ -152,8 +147,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView detailMaxGpsSpeed;//最大GPS速度の表示
     private TextView detailMaxSectionSpeed;//最大区間平均速度の表示
     // 日付・ルート名
-    private TextView detailDate;
-    private TextView detailRouteName;
+    private TextView detailDate;//走行した日時を表示
+    private TextView detailRouteName;//走行ルート名を表示
 
     // 走行分析
     private TextView detailMovingTime;//移動時間
@@ -174,11 +169,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView detailSpeed20Over;//20km/h~の走行速度の割合
 
     //色分けモード用の変数
-    private RoadSegment editingRoad;
-    private ArrayList<RoadSegment> roadSegments = new ArrayList<>();
-    private Polyline roadPreviewLine;
-    private ArrayList<Polyline> roadLines = new ArrayList<>();
-    private RadioGroup radioRoadType;
+    private RoadSegment editingRoad;//現在編集中の道路区間
+    private ArrayList<RoadSegment> roadSegments = new ArrayList<>();//保存済み道路区間のデータ
+    private Polyline roadPreviewLine;//編集中の道路を一時表示する線
+    private ArrayList<Polyline> roadLines = new ArrayList<>();//保存済み道路区間を描画するPolyline一覧
+    private RadioGroup radioRoadType;//道路区分選択用ラジオボタン
     private MapEventsOverlay mapEventsOverlay;//線上の点を選ぶための対策
     private GeoPoint lastRoadEndPoint = null;//最後の記録地点
     private int selectedRoadIndex = -1;//選択中の線を管理するインデックス(-1は選択していない状態を表す)
@@ -247,7 +242,7 @@ public class MainActivity extends AppCompatActivity {
     // 実際にJSON検索に使うキー
     private ArrayList<String> statisticsPeriodKeys = new ArrayList<>();
 
-    private boolean isUpdatingStatisticsSpinner = false;
+    private boolean isUpdatingStatisticsSpinner = false;//スピナー更新中の再帰処理を防ぐフラグ
     //グラフ表示用
     private DistanceBarChartView statDistanceChart;
     private TextView statDistanceChartTitle;
@@ -1381,6 +1376,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //画面モードを切り替え、対応するレイアウトやボタン表示を変更する関数
     private void changeMode(AppMode mode) {
         currentMode = mode;//モードを変更
 
@@ -1468,8 +1464,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //保存された走行履歴を読み込み、期間フィルターと並び替えを反映して一覧表示する関数
     private void loadHistoryList() {
-        // 前回表示した履歴を削除
+        // 前回表示した履歴一覧を削除
         historyList.removeAllViews();
 
         File routeDir =
@@ -1485,6 +1482,7 @@ public class MainActivity extends AppCompatActivity {
         File[] files =
                 routeDir.listFiles();
 
+        //履歴ファイルが見つからなかった場合、「保存された走行履歴はありません」と表示
         if (files == null || files.length == 0) {
             showEmptyHistoryMessage(
                     "保存された走行履歴はありません"
@@ -1499,7 +1497,9 @@ public class MainActivity extends AppCompatActivity {
         ArrayList<HistoryItem> historyItems =
                 new ArrayList<>();
 
+        //すべての履歴ファイルに実行
         for (File file : files) {
+            //拡張子が.json意外のものは読み込まない
             if (!file.getName().endsWith(".json")) {
                 continue;
             }
@@ -1581,8 +1581,9 @@ public class MainActivity extends AppCompatActivity {
         /*
          * 選択中の並び順を取得
          */
-        String selectedSort = "新しい順";
+        String selectedSort = "新しい順";//デフォルト
 
+        //スピナーの選択しているソート法がある場合、それを使用する
         if (spinnerHistorySort != null
                 && spinnerHistorySort.getSelectedItem() != null) {
 
@@ -1613,6 +1614,7 @@ public class MainActivity extends AppCompatActivity {
             long end = item.endTime;
             double distance = item.distance;
 
+            //履歴の概要を表示
             String dateText =
                     new SimpleDateFormat(
                             "yyyy/MM/dd HH:mm",
@@ -1761,7 +1763,7 @@ public class MainActivity extends AppCompatActivity {
             rowLayout.addView(historyView);
             rowLayout.addView(menuButton);
 
-            historyList.addView(rowLayout);
+            historyList.addView(rowLayout);//レイアウトを表示
         }
     }
 
@@ -1772,29 +1774,35 @@ public class MainActivity extends AppCompatActivity {
             long startTime,
             String selectedPeriod
     ) {
+        //すべての期間ならすべて表示
         if (selectedPeriod.equals("すべての期間")) {
             return true;
         }
 
+        //履歴の時期
         Calendar rideCalendar =
                 Calendar.getInstance(
                         Locale.JAPAN
                 );
 
+        //履歴の日時は記録開始に合わせる
         rideCalendar.setTimeInMillis(
                 startTime
         );
 
+        //現在の時刻
         Calendar nowCalendar =
                 Calendar.getInstance(
                         Locale.JAPAN
                 );
 
+        //今年(年だけを確認)
         if (selectedPeriod.equals("今年")) {
             return rideCalendar.get(Calendar.YEAR)
                     == nowCalendar.get(Calendar.YEAR);
         }
 
+        //今月(同じ年かつ同じ月)
         if (selectedPeriod.equals("今月")) {
             return rideCalendar.get(Calendar.YEAR)
                     == nowCalendar.get(Calendar.YEAR)
@@ -1802,12 +1810,14 @@ public class MainActivity extends AppCompatActivity {
                     == nowCalendar.get(Calendar.MONTH);
         }
 
+        //今週(weekStart≤startTime<weekEndとなるものを返す)
         if (selectedPeriod.equals("今週")) {
             Calendar weekStart =
                     Calendar.getInstance(
                             Locale.JAPAN
                     );
 
+            //今が何曜日化を取得
             int dayOfWeek =
                     weekStart.get(
                             Calendar.DAY_OF_WEEK
@@ -1817,11 +1827,13 @@ public class MainActivity extends AppCompatActivity {
             int daysFromMonday =
                     (dayOfWeek + 5) % 7;
 
+            //スタートの時間を今週の月曜日にする
             weekStart.add(
                     Calendar.DAY_OF_MONTH,
                     -daysFromMonday
             );
 
+            //時刻を0にする
             weekStart.set(
                     Calendar.HOUR_OF_DAY,
                     0
@@ -1839,6 +1851,7 @@ public class MainActivity extends AppCompatActivity {
                     0
             );
 
+            //来週の月曜日を求める
             Calendar weekEnd =
                     (Calendar) weekStart.clone();
 
@@ -1974,6 +1987,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //指定した走行履歴を地図へ表示し、詳細な走行統計も計算して表示する関数
     private void loadRouteOnHistoryMap(File file) {
         try {
             String jsonText = readTextFile(file);//ファイルデータの取得
@@ -2502,7 +2516,7 @@ public class MainActivity extends AppCompatActivity {
             return Math.sqrt(diffX * diffX + diffY * diffY);
         }
 
-        /**
+        /*
          * 線分で最も(px,py)に近い点がその線分のどのあたりにあるかを表すtを求める式
          * (px - x1) * dx + (py - y1) * dy : 内積を使って、点Pを線の方向に投影する
          * ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy) : 投影したものを線分上での割合に変換する
@@ -2560,25 +2574,28 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        editingRoad.type = getSelectedRoadType();
+        editingRoad.type = getSelectedRoadType();//区分を取得
 
+        //線を作る
         Polyline fixedLine = new Polyline();
         fixedLine.setPoints(new ArrayList<>(editingRoad.points));
         fixedLine.setColor(getColorByRoadType(editingRoad.type));
         fixedLine.setWidth(10.0f);
 
         map.getOverlays().add(fixedLine);
-        roadLines.add(fixedLine);
+        roadLines.add(fixedLine);//roadLinesに、書き入れたした線を追加
 
-        roadSegments.add(editingRoad);
+        roadSegments.add(editingRoad);//roadSegmentに作っていた線を追加
 
-        saveRoadSegmentsToJson();
+        saveRoadSegmentsToJson();//変更、追加を保存
 
-        lastRoadEndPoint = editingRoad.points.get(editingRoad.points.size() - 1);
+        lastRoadEndPoint = editingRoad.points.get(editingRoad.points.size() - 1);//最後の点を更新
 
+        //オーバーレイの更新
         map.getOverlays().remove(mapEventsOverlay);
         map.getOverlays().add(mapEventsOverlay);
 
+        //書き入れられるように初期化
         editingRoad = new RoadSegment(getSelectedRoadType());
 
         if (lastRoadEndPoint != null) {
@@ -2589,27 +2606,30 @@ public class MainActivity extends AppCompatActivity {
 
         clearSelectedRoadSegment();
 
-        map.invalidate();
+        map.invalidate();//描画の更新
 
         Toast.makeText(this, "色分け線を保存しました", Toast.LENGTH_SHORT).show();
     }
 
     //地図モード時色分けされた線を触るとコメントを表示する処理
     private void showRoadSegmentMemoDialog(int index) {
+        //選択していない時は何もしない
         if (index < 0 || index >= roadSegments.size()) {
             return;
         }
 
-        RoadSegment segment = roadSegments.get(index);
+        RoadSegment segment = roadSegments.get(index);//指定されたセグメントを取得
 
-        String typeText = getRoadTypeText(segment.type);
+        String typeText = getRoadTypeText(segment.type);//道路区分を取得
 
-        String memoText = segment.memo;
+        String memoText = segment.memo;//メモを取得
 
+        //メモが書かれていない時の処理
         if (memoText == null || memoText.trim().isEmpty()) {
             memoText = "コメントはありません";
         }
 
+        //ダイアログを作成して、メモを表示
         new AlertDialog.Builder(this)
                 .setTitle(typeText)
                 .setMessage(memoText)
@@ -2630,12 +2650,14 @@ public class MainActivity extends AppCompatActivity {
 
     //メモ編集用関数
     private void showMemoEditDialogForSelectedRoad() {
+        //何も選択されていなければ何もしない
         if (selectedRoadIndex < 0 || selectedRoadIndex >= roadSegments.size()) {
             return;
         }
 
-        RoadSegment segment = roadSegments.get(selectedRoadIndex);
+        RoadSegment segment = roadSegments.get(selectedRoadIndex);//指定されたセグメントを実行
 
+        //もともとの値を入れる
         EditText editText = new EditText(this);
         editText.setHint("例：道が狭い、車が多い、夜暗い など");
         editText.setMinLines(3);
@@ -2645,6 +2667,7 @@ public class MainActivity extends AppCompatActivity {
             editText.setText(segment.memo);
         }
 
+        //編集用ダイアログを作成
         new AlertDialog.Builder(this)
                 .setTitle("コメント編集")
                 .setMessage(getRoadTypeText(segment.type) + " のコメントを編集します。")
@@ -2700,7 +2723,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        boolean deleted = file.delete();
+        boolean deleted = file.delete();//履歴ファイルを削除
 
         if (deleted) {
             Toast.makeText(this, "履歴を削除しました", Toast.LENGTH_SHORT).show();
@@ -2792,10 +2815,12 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
+            //全区間に対して実行
             for (int i = 1; i < pointsArray.length(); i++) {
                 JSONObject prev = pointsArray.getJSONObject(i - 1);
                 JSONObject now = pointsArray.getJSONObject(i);
 
+                //二点間の距離を出す
                 double prevLat = prev.getDouble("lat");
                 double prevLon = prev.getDouble("lon");
                 double nowLat = now.getDouble("lat");
@@ -2804,6 +2829,7 @@ public class MainActivity extends AppCompatActivity {
                 double prevDistance = prev.getDouble("distance");
                 double nowDistance = now.getDouble("distance");
 
+                //２点間の移動時間をだす
                 long prevTime = prev.getLong("time");
                 long nowTime = now.getLong("time");
 
@@ -2814,11 +2840,14 @@ public class MainActivity extends AppCompatActivity {
                     continue;
                 }
 
+                //速度を計算
                 double speedMps = diffDistance / diffTime;
-                double speedKmh = speedMps * 3.6;
+                double speedKmh = speedMps * 3.6;//時速に変更
 
+                //速度に応じた色を取得
                 int color = getSpeedGradientColor(speedKmh);
 
+                //色付きの線を引く
                 Polyline sectionLine = new Polyline();
 
                 ArrayList<GeoPoint> sectionPoints = new ArrayList<>();
@@ -2829,11 +2858,11 @@ public class MainActivity extends AppCompatActivity {
                 sectionLine.setColor(color);
                 sectionLine.setWidth(10.0f);
 
-                historyMap.getOverlays().add(sectionLine);
-                historySpeedLines.add(sectionLine);
+                historyMap.getOverlays().add(sectionLine);//レイアウトに追加
+                historySpeedLines.add(sectionLine);//線を追加
             }
 
-            historyMap.invalidate();
+            historyMap.invalidate();//再描画
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -2898,8 +2927,9 @@ public class MainActivity extends AppCompatActivity {
         double lat = location.getLatitude();
         double lon = location.getLongitude();
 
-        float[] result = new float[1];
+        float[] result = new float[1];//距離計算の答えを入れるため
 
+        //二点間の距離を計算
         Location.distanceBetween(
                 lastRoutePoint.lat,
                 lastRoutePoint.lon,
@@ -2916,6 +2946,7 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
 
+        //速度の計算
         double sectionSpeedKmh = (distance / diffTime) * 3.6;
 
         // 異常に速い移動はGPSの飛びとして無視
@@ -2941,10 +2972,11 @@ public class MainActivity extends AppCompatActivity {
         GeoPoint point = new GeoPoint(lat, lon);
 
         if (!liveRouteGeoPoints.isEmpty()) {
-            GeoPoint lastPoint = liveRouteGeoPoints.get(liveRouteGeoPoints.size() - 1);
+            GeoPoint lastPoint = liveRouteGeoPoints.get(liveRouteGeoPoints.size() - 1);//最新の地点を取得
 
             float[] result = new float[1];
 
+            //距離を計算
             Location.distanceBetween(
                     lastPoint.getLatitude(),
                     lastPoint.getLongitude(),
@@ -2959,7 +2991,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        currentPoint = point;
+        currentPoint = point;//現在位置を更新
 
         liveRouteGeoPoints.add(point);
         routeLine.setPoints(new ArrayList<>(liveRouteGeoPoints));
@@ -2974,8 +3006,9 @@ public class MainActivity extends AppCompatActivity {
 
             JSONArray pointsArray = new JSONArray(routeJsonText);
 
-            liveRouteGeoPoints.clear();
+            liveRouteGeoPoints.clear();//線をクリア
 
+            //線を作る
             for (int i = 0; i < pointsArray.length(); i++) {
                 JSONObject pointJson = pointsArray.getJSONObject(i);
 
@@ -2989,7 +3022,7 @@ public class MainActivity extends AppCompatActivity {
             routeLine.setPoints(new ArrayList<>(liveRouteGeoPoints));
 
             if (!liveRouteGeoPoints.isEmpty()) {
-                currentPoint = liveRouteGeoPoints.get(liveRouteGeoPoints.size() - 1);
+                currentPoint = liveRouteGeoPoints.get(liveRouteGeoPoints.size() - 1);//現在位置を更新
             }
 
             Log.d("LIVE_ROUTE", "画面復帰時にルート復元 points=" + liveRouteGeoPoints.size());
@@ -3009,8 +3042,9 @@ public class MainActivity extends AppCompatActivity {
 
     //ハンバーガーメニューバーの表示メソッド
     private void showMainMenu(View anchor) {
-        PopupMenu popupMenu = new PopupMenu(this, anchor);
+        PopupMenu popupMenu = new PopupMenu(this, anchor);//ポップアップメニューを作成
 
+        //ボタンの追加
         popupMenu.getMenu().add("地図");
         popupMenu.getMenu().add("色分け");
         popupMenu.getMenu().add("履歴");
@@ -3018,9 +3052,11 @@ public class MainActivity extends AppCompatActivity {
         popupMenu.getMenu().add("メンテナンス");
         popupMenu.getMenu().add("設定");
 
+        //追加したボタンに対する処理
         popupMenu.setOnMenuItemClickListener(item -> {
-            String title = item.getTitle().toString();
+            String title = item.getTitle().toString();//押されたボタンの名前を取得
 
+            //それぞれの処理
             if (title.equals("地図")) {
                 changeMode(AppMode.MAP);
                 return true;
@@ -3054,14 +3090,14 @@ public class MainActivity extends AppCompatActivity {
             return false;
         });
 
-        popupMenu.show();
+        popupMenu.show();//メニューを可視化
     }
 
     //統計データの読み込み関数
     private void loadStatistics() {
         try {
             File file =
-                    new File(getFilesDir(), "statistics.json");
+                    new File(getFilesDir(), "statistics.json");//統計データの探索
 
             if (!file.exists()) {
                 currentStatisticsRoot = null;
@@ -3091,12 +3127,12 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            String jsonText = readTextFile(file);
+            String jsonText = readTextFile(file);//ファイルの中身を読み取る
 
             currentStatisticsRoot =
                     new JSONObject(jsonText);
 
-            updateStatisticsPeriodSpinner();
+            updateStatisticsPeriodSpinner();//スピナーの更新
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -3107,7 +3143,7 @@ public class MainActivity extends AppCompatActivity {
                     Toast.LENGTH_SHORT
             ).show();
 
-            showEmptyStatistics();
+            showEmptyStatistics();//何もない統計を表示
         }
     }
 
@@ -3170,6 +3206,8 @@ public class MainActivity extends AppCompatActivity {
         String selectedType =
                 selectedItem.toString();
 
+        //各期間についてのデータを取得
+        //全体→年別、年→月別、月→週別、週→日別のグラフを表示
         if (selectedType.equals("全体")) {
             statisticsPeriodLabels.add("全期間");
             statisticsPeriodKeys.add("allTime");
@@ -3213,7 +3251,7 @@ public class MainActivity extends AppCompatActivity {
 
         isUpdatingStatisticsSpinner = false;
 
-        displaySelectedStatistics();
+        displaySelectedStatistics();//統計の描画の更新
     }
 
     //年一覧を作る関数
@@ -3222,12 +3260,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        //何年の情報がファイル内に格納されているかを確認してリストの中に入れる
+        //2024年と2025年の統計情報があれば(2024,2025)みたいな感じになる
         ArrayList<String> keys =
                 getSortedJsonKeys(yearlyJson);
 
         for (String key : keys) {
-            statisticsPeriodKeys.add(key);
-            statisticsPeriodLabels.add(key + "年");
+            statisticsPeriodKeys.add(key);//検索キーに追加
+            statisticsPeriodLabels.add(key + "年");//スピナー表示用の名前の追加
         }
     }
 
@@ -3237,11 +3277,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        //統計データから、いつの月のデータがあるのかを取得
         ArrayList<String> keys =
                 getSortedJsonKeys(monthlyJson);
 
         for (String key : keys) {
-            statisticsPeriodKeys.add(key);
+            statisticsPeriodKeys.add(key);//検索キーに追加
 
             try {
                 Date date =
@@ -3256,7 +3297,7 @@ public class MainActivity extends AppCompatActivity {
                                 Locale.JAPAN
                         ).format(date);
 
-                statisticsPeriodLabels.add(label);
+                statisticsPeriodLabels.add(label);//スピナーの表示名を追加
 
             } catch (Exception e) {
                 statisticsPeriodLabels.add(key);
@@ -3296,32 +3337,37 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        //いつの日の情報があるかどうかを取得
         ArrayList<String> dayKeys =
                 getSortedJsonKeys(dailyJson);
 
+        //各一週間の初めの日を格納する配列を作成
         ArrayList<String> weekStartKeys =
                 new ArrayList<>();
 
+        //一週間の初めの日を取得
         for (String dayKey : dayKeys) {
             String weekStartKey =
-                    getWeekStartKey(dayKey);
+                    getWeekStartKey(dayKey);//その日が属する週の初めの日を取得
 
             if (weekStartKey == null) {
                 continue;
             }
 
+            //配列に入っていなかったら入れる
             if (!weekStartKeys.contains(weekStartKey)) {
                 weekStartKeys.add(weekStartKey);
             }
         }
 
+        //ソートを行い新しい順にする
         Collections.sort(
                 weekStartKeys,
                 Collections.reverseOrder()
         );
 
         for (String weekStartKey : weekStartKeys) {
-            statisticsPeriodKeys.add(weekStartKey);
+            statisticsPeriodKeys.add(weekStartKey);//検索キーに追加
 
             String weekEndKey =
                     addDaysToDateKey(
@@ -3333,12 +3379,15 @@ public class MainActivity extends AppCompatActivity {
                     formatDateKeyForLabel(weekStartKey)
                             + " ～ "
                             + formatDateKeyForLabel(weekEndKey)
-            );
+            );//スライダー表示名を入れる
         }
     }
 
+    //与えられた日の属する一週間の初めの日を返す関数
+    //今回は月曜日の日付を返します
     private String getWeekStartKey(String dayKey) {
         try {
+            //文字列を日付に変更(Javaが扱える形に変更)
             SimpleDateFormat format =
                     new SimpleDateFormat(
                             "yyyy-MM-dd",
@@ -3347,18 +3396,21 @@ public class MainActivity extends AppCompatActivity {
 
             Date date = format.parse(dayKey);
 
+            //扱いやすくするためにCalendarに変更
             Calendar calendar =
                     Calendar.getInstance(Locale.JAPAN);
 
             calendar.setTime(date);
 
             // 月曜日を週の開始にする
+
             int dayOfWeek =
-                    calendar.get(Calendar.DAY_OF_WEEK);
+                    calendar.get(Calendar.DAY_OF_WEEK);//何曜日かを取得
 
             int daysFromMonday =
-                    (dayOfWeek + 5) % 7;
+                    (dayOfWeek + 5) % 7;//月曜日から何日経過したかを計算
 
+            //その週の月曜日を求める
             calendar.add(
                     Calendar.DAY_OF_MONTH,
                     -daysFromMonday
@@ -3372,11 +3424,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //渡された日付を指定した数だけ進める関数
     private String addDaysToDateKey(
             String dayKey,
             int days
     ) {
         try {
+            //文字データを日付に変換
             SimpleDateFormat format =
                     new SimpleDateFormat(
                             "yyyy-MM-dd",
@@ -3385,11 +3439,13 @@ public class MainActivity extends AppCompatActivity {
 
             Date date = format.parse(dayKey);
 
+            //扱いやすい形に変換
             Calendar calendar =
                     Calendar.getInstance(Locale.JAPAN);
 
             calendar.setTime(date);
 
+            //日付を進める
             calendar.add(
                     Calendar.DAY_OF_MONTH,
                     days
@@ -3402,10 +3458,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //統計データの日付データを表示しやすい形に変換する関数
     private String formatDateKeyForLabel(
             String dayKey
     ) {
         try {
+            //日付に変換
             Date date =
                     new SimpleDateFormat(
                             "yyyy-MM-dd",
@@ -3424,30 +3482,36 @@ public class MainActivity extends AppCompatActivity {
 
     //選択された期間の統計を表示する関数
     private void displaySelectedStatistics() {
+        //統計データが存在しない場合
         if (currentStatisticsRoot == null) {
             showEmptyStatistics();
             return;
         }
 
+        //期間選択スピナーの選択を取得(0から新しい順に並びます)
         int position =
                 spinnerStatisticsPeriod
                         .getSelectedItemPosition();
 
+        //選択機関が存在しない場合
         if (position < 0
                 || position >= statisticsPeriodKeys.size()) {
-            showEmptyStatistics();
+            showEmptyStatistics();//からの統計データを表示
             return;
         }
 
+        //選択時期の検索キーを取得
         String periodKey =
                 statisticsPeriodKeys.get(position);
 
+        //検索キーがなかった場合
         if (periodKey.isEmpty()) {
             showEmptyStatistics();
             statSelectedPeriod.setText("データなし");
             return;
         }
 
+        //表示のスピナーで選択されているものを取得
         Object selectedItem =
                 spinnerStatisticsType.getSelectedItem();
 
@@ -3457,11 +3521,13 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        //文字列に変換
         String selectedType =
                 selectedItem.toString();
 
         JSONObject statisticsBlock = null;
 
+        //選択された範囲の統計情報を取得
         if (selectedType.equals("全体")) {
             statisticsBlock =
                     currentStatisticsRoot
@@ -3505,11 +3571,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        //時期の表示
         statSelectedPeriod.setText(
                 statisticsPeriodLabels.get(position)
         );
 
-        showStatisticsBlock(statisticsBlock);
+        showStatisticsBlock(statisticsBlock);//統計情報画面の描画
         //グラフの更新
         updateDistanceChart(
                 selectedType,
@@ -3524,13 +3591,14 @@ public class MainActivity extends AppCompatActivity {
     ) {
         try {
             JSONObject result =
-                    createEmptyStatisticsBlockForDisplay();
+                    createEmptyStatisticsBlockForDisplay();//JSONファイルの読み込み
 
             if (dailyJson == null) {
                 return result;
             }
 
             for (int i = 0; i < 7; i++) {
+                //その日付のデータを取得
                 String dayKey =
                         addDaysToDateKey(
                                 weekStartKey,
@@ -3540,6 +3608,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject dayBlock =
                         dailyJson.optJSONObject(dayKey);
 
+                //統計データの更新
                 if (dayBlock != null) {
                     mergeStatisticsBlocks(
                             result,
@@ -3557,11 +3626,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //からの統計用表示ブロックを作成する関数
+    //週間統計の合成用に、全項目を0で初期化した統計ブロックを作る関数
     private JSONObject createEmptyStatisticsBlockForDisplay()
             throws Exception {
 
         JSONObject blockJson = new JSONObject();
 
+        //累計情報用のブロック
         JSONObject summaryJson = new JSONObject();
         summaryJson.put("totalRideCount", 0);
         summaryJson.put("totalDistance", 0.0);
@@ -3570,6 +3641,7 @@ public class MainActivity extends AppCompatActivity {
         summaryJson.put("totalStopTime", 0.0);
         summaryJson.put("totalStopCount", 0);
 
+        //最高記録用のブロック
         JSONObject recordsJson = new JSONObject();
         recordsJson.put("maxSingleRideDistance", 0.0);
         recordsJson.put("maxSingleRideTime", 0);
@@ -3578,6 +3650,7 @@ public class MainActivity extends AppCompatActivity {
         recordsJson.put("maxGpsSpeed", 0.0);
         recordsJson.put("longestStopTime", 0.0);
 
+        //速度帯ごとの時間を保存するブロック
         JSONObject speedJson = new JSONObject();
         speedJson.put("time0to5", 0.0);
         speedJson.put("time5to10", 0.0);
@@ -3587,6 +3660,7 @@ public class MainActivity extends AppCompatActivity {
         speedJson.put("time25to30", 0.0);
         speedJson.put("time30Over", 0.0);
 
+        //1回の走行距離帯ごとの回数を保存するブロック
         JSONObject distanceJson = new JSONObject();
         distanceJson.put("ride0to5km", 0);
         distanceJson.put("ride5to10km", 0);
@@ -3594,6 +3668,7 @@ public class MainActivity extends AppCompatActivity {
         distanceJson.put("ride20to50km", 0);
         distanceJson.put("ride50kmOver", 0);
 
+        //作成した4種類の統計ブロックを1つのJSONObjectへまとめる
         blockJson.put("summary", summaryJson);
         blockJson.put("records", recordsJson);
         blockJson.put("speedDistribution", speedJson);
@@ -3608,6 +3683,7 @@ public class MainActivity extends AppCompatActivity {
             JSONObject source
     ) throws Exception {
 
+        //必要なデータを取得
         JSONObject targetSummary =
                 target.getJSONObject("summary");
 
@@ -3632,6 +3708,7 @@ public class MainActivity extends AppCompatActivity {
         JSONObject sourceDistance =
                 source.optJSONObject("distanceDistribution");
 
+        //sourceSummaryがあるなら値を加算
         if (sourceSummary != null) {
             addLongValue(
                     targetSummary,
@@ -3747,6 +3824,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //指定したdouble型の統計値をtargetへ加算する補助関数
     private void addDoubleValue(
             JSONObject target,
             JSONObject source,
@@ -3760,6 +3838,7 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    //指定したlong型の統計値をtargetへ加算する補助関数
     private void addLongValue(
             JSONObject target,
             JSONObject source,
@@ -3773,6 +3852,7 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    //double型の統計値について、現在値と追加値の大きい方を保存する補助関数
     private void setMaximumDouble(
             JSONObject target,
             JSONObject source,
@@ -3788,6 +3868,7 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    //long型の統計値について、現在値と追加値の大きい方を保存する補助関数
     private void setMaximumLong(
             JSONObject target,
             JSONObject source,
@@ -3803,10 +3884,12 @@ public class MainActivity extends AppCompatActivity {
         );
     }
 
+    //統計ブロックの値を取り出し、統計画面の各表示欄へ反映する関数
     private void showStatisticsBlock(
             JSONObject statisticsBlock
     ) {
         try {
+            //累計情報、最高記録、速度分布、距離分布を取得
             JSONObject summaryJson =
                     statisticsBlock.optJSONObject("summary");
 
@@ -4072,6 +4155,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //統計データがない場合に各項目を0で表示する関数
     private void showEmptyStatistics() {
         statTotalRideCount.setText("総走行回数: 0回");
         statTotalDistance.setText("総走行距離: 0.00 km");
@@ -4115,6 +4199,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //グラフの更新関数
+    //選択中の統計単位に応じて、表示する走行距離グラフを切り替える関数
     private void updateDistanceChart(
             String selectedType,
             String periodKey
@@ -4140,6 +4225,7 @@ public class MainActivity extends AppCompatActivity {
 
     //それぞれの期間のグラフ用時間数
     //年ごとの走行距離グラフ
+    //年ごとの総走行距離を棒グラフに表示する関数
     private void showYearlyDistanceChart() {
         ArrayList<String> labels = new ArrayList<>();
         ArrayList<Double> values = new ArrayList<>();
@@ -4181,6 +4267,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //選択年の月ごとの走行距離グラフ
+    //指定した年について1月から12月までの走行距離を表示する関数
     private void showMonthlyDistanceChart(
             String yearKey
     ) {
@@ -4190,6 +4277,7 @@ public class MainActivity extends AppCompatActivity {
         JSONObject monthlyJson =
                 currentStatisticsRoot.optJSONObject("monthly");
 
+        //1月から12月まで順番にデータを確認
         for (int month = 1; month <= 12; month++) {
             String monthKey =
                     String.format(
@@ -4227,6 +4315,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //選択月の週ごとの走行距離グラフ
+    //指定した月について、各週の走行距離を日別データから集計して表示する関数
     private void showWeeklyDistanceChart(
             String monthKey
     ) {
@@ -4271,6 +4360,7 @@ public class MainActivity extends AppCompatActivity {
             double distanceKm =
                     getStatisticsBlockDistanceKm(dayBlock);
 
+            //この週がすでに配列に登録されているか確認
             int weekIndex =
                     weekStartKeys.indexOf(weekStartKey);
 
@@ -4320,6 +4410,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //選択週の日ごとの走行距離グラフ
+    //指定した週について、月曜日から日曜日までの日別走行距離を表示する関数
     private void showDailyDistanceChart(
             String weekStartKey
     ) {
@@ -4387,6 +4478,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //統計ブロックから距離を取得する関数
+    //統計ブロックから総走行距離を取得し、mからkmへ変換して返す関数
     private double getStatisticsBlockDistanceKm(
             JSONObject statisticsBlock
     ) {
@@ -4411,6 +4503,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //グラフ用に古い順でキーを取得するための関数
+    //JSON内のキーを古い順（昇順）に並べて返す関数
     private ArrayList<String> getSortedJsonKeysAscending(
             JSONObject jsonObject
     ) {
@@ -4434,6 +4527,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //日付・月の表示用関数
+    //yyyy-MM-dd形式の日付をM/d形式へ変換する関数
     private String formatShortDateKey(
             String dayKey
     ) {
@@ -4454,6 +4548,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    //yyyy-MM形式を「yyyy年M月」の表示形式へ変換する関数
     private String formatMonthKeyForLabel(
             String monthKey
     ) {
@@ -4479,12 +4574,15 @@ public class MainActivity extends AppCompatActivity {
         showMaintenanceEditDialog(null);
     }
 
+    //メンテナンス記録の新規追加と編集で共通して使う入力ダイアログを表示する関数
     private void showMaintenanceEditDialog(
             JSONObject editingRecord
     ) {
+        //編集対象が渡されていれば編集モード、nullなら新規追加モード
         boolean isEditing =
                 editingRecord != null;
 
+        //ダイアログ内の入力欄を縦方向に並べるレイアウトを作成
         LinearLayout dialogLayout =
                 new LinearLayout(this);
 
@@ -4795,6 +4893,7 @@ public class MainActivity extends AppCompatActivity {
                 }
         );
 
+        //新規追加と編集でタイトル・確定ボタン名を切り替えてダイアログを作成
         AlertDialog dialog =
                 new AlertDialog.Builder(this)
                         .setTitle(
@@ -4814,6 +4913,7 @@ public class MainActivity extends AppCompatActivity {
                         )
                         .create();
 
+        //確定ボタン押下時に入力内容を検証して保存または更新する
         dialog.setOnShowListener(dialogInterface -> {
             dialog.getButton(
                     AlertDialog.BUTTON_POSITIVE
@@ -4940,6 +5040,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //メンテナンス記録をJSONに保存する関数
+    //入力されたメンテナンス内容をmaintenance.jsonへ新規保存する関数
     private void saveMaintenanceRecord(
             String type,
             String title,
@@ -4949,6 +5050,7 @@ public class MainActivity extends AppCompatActivity {
             String nextDistanceIntervalLabel
     ) {
         try {
+            //既存のメンテナンスJSONを読み込む
             JSONObject rootJson =
                     loadMaintenanceJson();
 
@@ -4957,6 +5059,7 @@ public class MainActivity extends AppCompatActivity {
                             "records"
                     );
 
+            //選択した次回予定間隔から次回予定日を計算
             String nextDate =
                     calculateNextMaintenanceDate(
                             selectedMaintenanceDateKey,
@@ -4982,6 +5085,7 @@ public class MainActivity extends AppCompatActivity {
                                 + nextDistanceInterval;
             }
 
+            //今回保存する1件分のメンテナンス記録を作成
             JSONObject recordJson =
                     new JSONObject();
 
@@ -5087,9 +5191,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //選択日の記録を読み込む関数
+    //選択した日付に関係する実施記録・予定を読み込んで一覧表示する関数
     private void loadMaintenanceList(
             String dateKey
     ) {
+        //前回表示していた記録一覧を削除
         maintenanceList.removeAllViews();
 
         File file =
@@ -5214,9 +5320,11 @@ public class MainActivity extends AppCompatActivity {
                                 "なし"
                         );
 
+                //1件分のメンテナンス内容を表示するTextViewを作成
                 TextView recordView =
                         new TextView(this);
 
+                //表示する文章を順番に組み立てる
                 StringBuilder text =
                         new StringBuilder();
 
@@ -5508,6 +5616,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //予定修理時間を初期値を返す関数
+    //メンテナンス種類ごとの推奨次回予定期間を返す関数
     private String getDefaultMaintenanceInterval(
             String maintenanceType
     ) {
@@ -5597,6 +5706,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //次回予定日を計算する関数
+    //基準日と選択された間隔から次回メンテナンス予定日を計算する関数
     private String calculateNextMaintenanceDate(
             String baseDateKey,
             String interval
@@ -5625,6 +5735,7 @@ public class MainActivity extends AppCompatActivity {
 
             calendar.setTime(baseDate);
 
+            //選択された期間に応じて日付を進める
             switch (interval) {
                 case "1週間後":
                     calendar.add(Calendar.WEEK_OF_YEAR, 1);
@@ -5728,6 +5839,7 @@ public class MainActivity extends AppCompatActivity {
 
     //JSONの読み書きを共通関数
     //読み込み
+    //maintenance.jsonを読み込み、存在しない場合は初期構造を作って返す関数
     private JSONObject loadMaintenanceJson()
             throws Exception {
 
@@ -5766,6 +5878,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //保存
+    //maintenance.jsonをUTF-8形式で保存する関数
     private void saveMaintenanceJson(
             JSONObject rootJson
     ) throws Exception {
@@ -5789,6 +5902,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //編集処理の関数
+    //指定されたIDのメンテナンス記録を検索して内容を更新する関数
     private void updateMaintenanceRecord(
             long recordId,
             String type,
@@ -5981,6 +6095,7 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
+    //指定されたIDのメンテナンス記録をJSONから削除する関数
     private void deleteMaintenanceRecord(
             long recordId
     ) {
@@ -6051,6 +6166,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //タップした時の処理を追加
+    //メンテナンス記録をタップしたときに編集・削除メニューを表示する関数
     private void showMaintenanceRecordMenu(
             View anchor,
             JSONObject recordJson
@@ -6094,6 +6210,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //日付表示用関数
+    //yyyy-MM-dd形式の日付を「yyyy年M月d日」形式へ変換する関数
     private String formatMaintenanceDate(
             String dateKey
     ) {
@@ -6151,6 +6268,7 @@ public class MainActivity extends AppCompatActivity {
                 return Long.MAX_VALUE;
             }
 
+            //今日と予定日の時刻部分を0時にそろえて日付だけで差を求める
             Calendar today =
                     Calendar.getInstance(
                             Locale.JAPAN
@@ -6279,6 +6397,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView createMaintenanceDayView(
             int position
     ) {
+        //カレンダーの1日分のセルとして使うTextViewを作成
         TextView dayView =
                 new TextView(this);
 
@@ -6356,8 +6475,10 @@ public class MainActivity extends AppCompatActivity {
          */
         loadMaintenanceCalendarDates();
 
+        //前回描画したカレンダーをすべて削除
         maintenanceCalendarGrid.removeAllViews();
 
+        //現在表示対象となっている年と月を取得
         int year =
                 maintenanceDisplayCalendar.get(
                         Calendar.YEAR
@@ -6377,6 +6498,7 @@ public class MainActivity extends AppCompatActivity {
                 )
         );
 
+        //その月の1日を表すCalendarを作成
         Calendar firstDay =
                 Calendar.getInstance(
                         Locale.JAPAN
@@ -6409,6 +6531,7 @@ public class MainActivity extends AppCompatActivity {
                         Calendar.DAY_OF_WEEK
                 ) - 1;
 
+        //その月が何日まであるか取得
         int maxDay =
                 firstDay.getActualMaximum(
                         Calendar.DAY_OF_MONTH
@@ -6449,6 +6572,7 @@ public class MainActivity extends AppCompatActivity {
                     String.valueOf(day)
             );
 
+            //JSON検索用のyyyy-MM-dd形式の日付キーを作成
             String dateKey =
                     String.format(
                             Locale.JAPAN,
@@ -6458,6 +6582,7 @@ public class MainActivity extends AppCompatActivity {
                             day
                     );
 
+            //その日に実施記録・予定があるか確認
             boolean hasRecord =
                     maintenanceRecordDates.contains(
                             dateKey
@@ -6614,6 +6739,7 @@ public class MainActivity extends AppCompatActivity {
      * Android 13以降で通知権限を要求する
      */
     private void requestNotificationPermission() {
+        //Android 13未満では通知権限の個別許可が不要
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return;
         }
@@ -6672,6 +6798,7 @@ public class MainActivity extends AppCompatActivity {
      * メンテナンス確認を1日1回実行する
      */
     private void scheduleMaintenanceReminder() {
+        //MaintenanceReminderWorkerを1日ごとに実行する定期処理を作成
         PeriodicWorkRequest request =
                 new PeriodicWorkRequest.Builder(
                         MaintenanceReminderWorker.class,
